@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import type { StateStore } from "./state/store";
-import type { ServiceState, WorkItem } from "./cfactory/types";
+import type { Anomaly, ServiceState, WorkItem } from "./cfactory/types";
 import { classifyStatus, activeStage, STAGES, STAGE_SERVICE, type StatusCategory, type Stage } from "./status";
 
 export type FactoryNode = WorkItemNode | StageNode;
@@ -39,7 +39,7 @@ export class FactoryPipelineProvider implements vscode.TreeDataProvider<FactoryN
       }
       return this.store.getItems().map((item) => {
         const percent = this.store.getProgress(item.correlation_key)?.percent ?? null;
-        return new WorkItemNode(item, percent);
+        return new WorkItemNode(item, percent, this.store.getAnomaly(item.correlation_key));
       });
     }
     if (element instanceof WorkItemNode) {
@@ -54,21 +54,28 @@ export class WorkItemNode extends vscode.TreeItem {
   constructor(
     readonly item: WorkItem,
     percent: number | null,
+    anomaly?: Anomaly,
   ) {
     super(
       `#${item.correlation_key}${item.title ? ` ${item.title}` : ""}`,
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     const stage = activeStage(item);
-    this.description = stage === "Pending" ? "pending" : percent != null ? `${stage} ${Math.round(percent)}%` : stage;
+    const base = stage === "Pending" ? "pending" : percent != null ? `${stage} ${Math.round(percent)}%` : stage;
+    this.description = anomaly ? `${base} — ${anomaly.kind}` : base;
     this.contextValue = "factory.workItem";
-    this.iconPath = workItemIcon(item);
-    this.tooltip = new vscode.MarkdownString(
+    this.iconPath = anomaly
+      ? new vscode.ThemeIcon("warning", new vscode.ThemeColor(anomaly.severity === "high" ? "charts.red" : "charts.orange"))
+      : workItemIcon(item);
+    let tip =
       `**#${item.correlation_key}** ${item.title ?? ""}\n\n` +
-        `- Plan: ${item.pfactory.status ?? "-"}\n` +
-        `- Code: ${item.aifactory.status ?? "-"}\n` +
-        `- Test: ${item.tfactory.status ?? "-"}`,
-    );
+      `- Plan: ${item.pfactory.status ?? "-"}\n` +
+      `- Code: ${item.aifactory.status ?? "-"}\n` +
+      `- Test: ${item.tfactory.status ?? "-"}`;
+    if (anomaly) {
+      tip += `\n\n**Anomaly (${anomaly.kind}, ${anomaly.severity}):** ${anomaly.detail}`;
+    }
+    this.tooltip = new vscode.MarkdownString(tip);
   }
 }
 

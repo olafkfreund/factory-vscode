@@ -86,6 +86,11 @@ export class StateStore extends EventEmitter {
     return this.anomalyList;
   }
 
+  /** The first anomaly affecting a work item, if any. */
+  getAnomaly(correlationKey: string): Anomaly | undefined {
+    return this.anomalyList.find((a) => a.correlation_key === correlationKey);
+  }
+
   /** Count of work items currently reporting live progress (in flight). */
   get runningCount(): number {
     return this.progressByKey.size;

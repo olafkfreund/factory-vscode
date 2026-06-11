@@ -25,9 +25,14 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(notifier);
 
   let socket: LiveSocket | undefined;
+  let anomalyTimer: NodeJS.Timeout | undefined;
   const stopSocket = () => {
     socket?.close();
     socket = undefined;
+    if (anomalyTimer) {
+      clearInterval(anomalyTimer);
+      anomalyTimer = undefined;
+    }
   };
 
   const treeView = vscode.window.createTreeView("factory.pipeline", { treeDataProvider: pipeline });
@@ -112,6 +117,19 @@ export function activate(context: vscode.ExtensionContext): void {
         onOpen: () => output.appendLine("Live feed connected."),
         onClose: () => output.appendLine("Live feed closed; will reconnect."),
       });
+
+      // Anomalies are computed by CFactory and not pushed over the feed, so
+      // refresh them on an interval while connected.
+      const interval = Math.max(cfg.pollIntervalMs, 5000);
+      anomalyTimer = setInterval(() => {
+        void (async () => {
+          try {
+            store.setAnomalies(await makeClient().anomalies());
+          } catch {
+            /* transient; keep last-known */
+          }
+        })();
+      }, interval);
     } catch (err) {
       stopSocket();
       statusBar.setState("offline");
