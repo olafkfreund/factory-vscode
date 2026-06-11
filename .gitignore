@@ -5,9 +5,11 @@ node_modules/
 
 # Build output
 out/
+out-e2e/
 dist/
 *.vsix
 webview-ui/dist/
+.vscode-test/
 
 # Logs
 *.log

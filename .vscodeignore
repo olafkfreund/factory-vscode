@@ -10,6 +10,10 @@ webview-ui/*.json
 webview-ui/*.config.*
 node_modules/**
 docs/**
+test-e2e/**
+out-e2e/**
+.vscode-test.mjs
+.vscode-test/**
 **/*.ts
 **/*.map
 **/tsconfig.json
