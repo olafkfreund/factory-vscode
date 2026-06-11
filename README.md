@@ -50,6 +50,42 @@ CFactory :3111
 - MCP for chat (optional): register CFactory's MCP with the IDE assistant so it can answer
   "where is #142 and why is it stuck?".
 
+## Getting started
+
+1. Install the extension (from the VS Marketplace / Open VSX, or a packaged VSIX).
+2. Make sure CFactory is running and reachable (default `http://localhost:3111`).
+3. Set `factory.cfactoryUrl` if CFactory is elsewhere, and run `Factory: Set CFactory Token`
+   if your CFactory requires a bearer token.
+4. Open the Factory view in the activity bar. The extension auto-connects (toggle with
+   `factory.autoConnect`); use `Factory: Connect` to connect manually.
+5. Open the animated cockpit with `Factory: Open Cockpit`, and a work item's live agent console
+   from the tree's inline action or the cockpit.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `Factory: Connect` | Connect to CFactory and start the live feed |
+| `Factory: Refresh` | Reconnect and re-hydrate the pipeline |
+| `Factory: Open Cockpit` | Open the animated pipeline cockpit |
+| `Factory: Open Live Console` | Stream a work item's live agent console |
+| `Factory: Open Work Item on GitHub` | Open the issue (requires `factory.githubRepo`) |
+| `Factory: Set CFactory Token` | Store the CFactory bearer token in SecretStorage |
+
+## Configuration
+
+| Setting | Type | Default | Description |
+|---|---|---|---|
+| `factory.cfactoryUrl` | string | `http://localhost:3111` | Base URL of the CFactory backend (REST + WebSocket). |
+| `factory.autoConnect` | boolean | `true` | Connect automatically when the editor starts. |
+| `factory.githubRepo` | string | `""` | `owner/repo` used to build work-item issue links from the correlation key. Empty disables "Open Work Item on GitHub". |
+| `factory.notifications.level` | enum | `important` | Which events notify: `off`, `important` (failures / awaiting-review / anomalies), or `all`. |
+| `factory.console.maxLines` | number | `5000` | Scrollback lines kept in the live agent console. |
+| `factory.poll.intervalMs` | number | `5000` | REST fallback poll interval, and the floor for the anomaly refresh interval. |
+
+The CFactory token is never stored in settings; it lives in the editor's SecretStorage and is held
+only by the extension host (never the webview).
+
 ## Compatibility
 
 Built on stable `vscode.*` APIs and the standard Webview API only (no proposed APIs), and published
