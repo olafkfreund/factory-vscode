@@ -52,8 +52,31 @@ CFactory :3111
 
 ## Compatibility
 
-Built on stable `vscode.*` APIs and the standard Webview API, published to OpenVSX and the VS
-Marketplace, so it runs in VSCode, Antigravity, Cursor, Windsurf, and VSCodium.
+Built on stable `vscode.*` APIs and the standard Webview API only (no proposed APIs), and published
+to both the VS Marketplace and Open VSX, so the same package installs across VSCode and the
+OpenVSX-based editors.
+
+The MCP-for-chat integration is feature-detected: where an IDE lacks the MCP provider API, that
+single feature is skipped and everything else works unchanged.
+
+### Tested-IDE matrix
+
+| Editor | Distribution | Status |
+|---|---|---|
+| VSCode | VS Marketplace | Primary target; built + packaged in CI |
+| VSCodium | Open VSX | Target (stable APIs + Open VSX) |
+| Cursor | Open VSX | Target (stable APIs + Open VSX) |
+| Windsurf | Open VSX | Target (stable APIs + Open VSX) |
+| Antigravity | Open VSX | Target (stable APIs + Open VSX) |
+
+Runtime smoke tests (`@vscode/test-electron`) are tracked separately; this matrix records the
+compatibility basis, and entries move to "Verified" as each editor is exercised.
+
+### Releasing
+
+Pushing a `v*` tag runs the release workflow: it builds, packages the VSIX, publishes to the VS
+Marketplace (`VSCE_PAT`) and Open VSX (`OVSX_PAT`) when those secrets are present, and attaches the
+VSIX to a GitHub release. Publishing steps are skipped automatically when the tokens are absent.
 
 ## Design
 
