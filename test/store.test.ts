@@ -71,6 +71,13 @@ test("setAnomalies updates count", () => {
   assert.equal(s.anomalyCount, 1);
 });
 
+test("getAnomaly returns the matching anomaly", () => {
+  const s = new StateStore();
+  s.setAnomalies([{ kind: "stuck", severity: "high", correlation_key: "42", title: null, detail: "no progress 24h" }]);
+  assert.equal(s.getAnomaly("42")?.kind, "stuck");
+  assert.equal(s.getAnomaly("99"), undefined);
+});
+
 test("reviewCount and attentionCount combine review items and anomalies", () => {
   const s = new StateStore();
   const reviewItem = wi("3");
