@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+  <!-- Three PARR stage nodes connected by a pipeline -->
+  <circle cx="5" cy="12" r="2.5"/>
+  <circle cx="12" cy="12" r="2.5"/>
+  <circle cx="19" cy="12" r="2.5"/>
+  <rect x="6.8" y="11.1" width="3.4" height="1.8" rx="0.9"/>
+  <rect x="13.8" y="11.1" width="3.4" height="1.8" rx="0.9"/>
+</svg>
