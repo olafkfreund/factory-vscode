@@ -5,7 +5,8 @@ import { RestClient, FactoryHttpError } from "./cfactory/restClient";
 import { LiveSocket } from "./cfactory/liveSocket";
 import { StateStore } from "./state/store";
 import { FactoryPipelineProvider, WorkItemNode } from "./pipelineView";
-import { CockpitPanel } from "./cockpitPanel";
+import { CockpitPanel, type ConsoleConnector } from "./cockpitPanel";
+import { ConsoleSocket } from "./cfactory/consoleSocket";
 import { FactoryStatusBar } from "./statusBar";
 import { Notifier } from "./notify/notifier";
 
@@ -50,6 +51,38 @@ export function activate(context: vscode.ExtensionContext): void {
   const makeClient = (): RestClient => {
     const cfg = readConfig();
     return new RestClient({ baseUrl: cfg.cfactoryUrl, getToken: () => auth.getToken() });
+  };
+
+  // Opens a host-side console stream for a work item and forwards ANSI bytes
+  // (base64) to the webview. The token stays in the host.
+  const consoleConnector: ConsoleConnector = (key, handlers) => {
+    const cfg = readConfig();
+    const client = makeClient();
+    let sock: ConsoleSocket | undefined;
+    let cancelled = false;
+    void (async () => {
+      let wsPath = `/api/live-agents/${encodeURIComponent(key)}/ws`;
+      try {
+        const agent = (await client.liveAgents()).agents.find((a) => a.correlation_key === key);
+        if (agent?.ws_path) {
+          wsPath = agent.ws_path;
+        }
+      } catch {
+        /* fall back to the conventional path */
+      }
+      if (cancelled) {
+        return;
+      }
+      sock = new ConsoleSocket(cfg.cfactoryUrl, wsPath, () => auth.getToken(), {
+        onData: (buf) => handlers.onData(buf.toString("base64")),
+        onOpen: () => handlers.onStatus("open"),
+        onClose: () => handlers.onStatus("closed"),
+      });
+    })();
+    return new vscode.Disposable(() => {
+      cancelled = true;
+      sock?.close();
+    });
   };
 
   // Connect: hydrate from REST, then keep current via the live WebSocket.
@@ -102,14 +135,15 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("factory.connect", connect),
     vscode.commands.registerCommand("factory.refresh", () => void connect()),
-    vscode.commands.registerCommand("factory.openCockpit", () => CockpitPanel.show(context, store)),
+    vscode.commands.registerCommand("factory.openCockpit", () => CockpitPanel.show(context, store, consoleConnector)),
     vscode.commands.registerCommand("factory.openConsole", (arg?: WorkItemNode | string) => {
       const key = keyOf(arg);
-      vscode.window.showInformationMessage(
-        key
-          ? `Factory: the live agent console for #${key} is implemented in the cockpit milestone.`
-          : "Factory: the live agent console is implemented in the cockpit milestone.",
-      );
+      const panel = CockpitPanel.show(context, store, consoleConnector);
+      if (key) {
+        panel.openConsole(key);
+      } else {
+        vscode.window.showInformationMessage("Factory: select a work item to open its console.");
+      }
     }),
     vscode.commands.registerCommand("factory.openWorkItemOnGitHub", (arg?: WorkItemNode | string) => {
       const key = keyOf(arg);

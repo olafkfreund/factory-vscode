@@ -113,10 +113,14 @@ export class LiveSocket {
   }
 }
 
-/** http(s)://host -> ws(s)://host/api/ws */
-export function toWsUrl(baseUrl: string): string {
+/** http(s)://host -> ws(s)://host (no path) */
+export function toWsOrigin(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, "");
   const proto = trimmed.startsWith("https") ? "wss" : "ws";
-  const hostPart = trimmed.replace(/^https?/, proto);
-  return `${hostPart}/api/ws`;
+  return trimmed.replace(/^https?/, proto);
+}
+
+/** http(s)://host -> ws(s)://host/api/ws */
+export function toWsUrl(baseUrl: string): string {
+  return `${toWsOrigin(baseUrl)}/api/ws`;
 }

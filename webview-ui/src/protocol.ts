@@ -34,11 +34,18 @@ export interface CockpitState {
   anomalies: Anomaly[];
 }
 
-export type HostToWebview = { type: "state"; state: CockpitState };
+export type ConsoleStatus = "open" | "closed";
+
+export type HostToWebview =
+  | { type: "state"; state: CockpitState }
+  | { type: "consoleOpen"; key: string }
+  | { type: "console"; key: string; data: string }
+  | { type: "consoleStatus"; key: string; status: ConsoleStatus };
 
 export type WebviewToHost =
   | { type: "ready" }
   | { type: "openConsole"; key: string }
+  | { type: "closeConsole" }
   | { type: "openOnGitHub"; key: string };
 
 interface VsCodeApi {

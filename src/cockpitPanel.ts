@@ -1,38 +1,56 @@
 import * as vscode from "vscode";
 import type { StateStore } from "./state/store";
-import type { CockpitState, WebviewToHost } from "./webview/protocol";
+import type { CockpitState, WebviewToHost, ConsoleStatus } from "./webview/protocol";
+
+export interface ConsoleHandlers {
+  onData: (base64: string) => void;
+  onStatus: (status: ConsoleStatus) => void;
+}
+
+/** Opens a host-side console stream for a work item; returns a disposable. */
+export type ConsoleConnector = (key: string, handlers: ConsoleHandlers) => vscode.Disposable;
 
 /**
- * The cockpit Webview. Mounts the built React app from webview-ui/dist and
- * bridges it to the host over postMessage. The host owns the store, sockets,
- * and token; the webview is a pure view fed `state` messages. The animated
- * pipeline (#9) and embedded console (#10) build on this shell.
+ * The cockpit Webview. Mounts the built React app and bridges it to the host.
+ * The host owns the store, sockets, and token; the webview is a pure view.
  */
 export class CockpitPanel {
   private static current: CockpitPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
+  private activeConsole: vscode.Disposable | undefined;
 
-  static show(context: vscode.ExtensionContext, store: StateStore): void {
+  static show(context: vscode.ExtensionContext, store: StateStore, connector: ConsoleConnector): CockpitPanel {
     if (CockpitPanel.current) {
       CockpitPanel.current.panel.reveal(vscode.ViewColumn.Active);
-      return;
+      return CockpitPanel.current;
     }
     const panel = vscode.window.createWebviewPanel("factory.cockpit", "Factory Cockpit", vscode.ViewColumn.Active, {
       enableScripts: true,
       retainContextWhenHidden: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "webview-ui", "dist")],
     });
-    CockpitPanel.current = new CockpitPanel(panel, context, store);
+    CockpitPanel.current = new CockpitPanel(panel, context, store, connector);
+    return CockpitPanel.current;
+  }
+
+  /** Open (or switch) the embedded console for a work item, revealing the cockpit. */
+  openConsole(key: string): void {
+    this.activeConsole?.dispose();
+    void this.panel.webview.postMessage({ type: "consoleOpen", key });
+    this.activeConsole = this.connector(key, {
+      onData: (base64) => void this.panel.webview.postMessage({ type: "console", key, data: base64 }),
+      onStatus: (status) => void this.panel.webview.postMessage({ type: "consoleStatus", key, status }),
+    });
   }
 
   private constructor(
     panel: vscode.WebviewPanel,
     private readonly context: vscode.ExtensionContext,
     private readonly store: StateStore,
+    private readonly connector: ConsoleConnector,
   ) {
     this.panel = panel;
-
     void this.render();
 
     this.panel.webview.onDidReceiveMessage((msg: WebviewToHost) => this.onMessage(msg), null, this.disposables);
@@ -50,7 +68,11 @@ export class CockpitPanel {
         this.postState();
         break;
       case "openConsole":
-        void vscode.commands.executeCommand("factory.openConsole", msg.key);
+        this.openConsole(msg.key);
+        break;
+      case "closeConsole":
+        this.activeConsole?.dispose();
+        this.activeConsole = undefined;
         break;
       case "openOnGitHub":
         void vscode.commands.executeCommand("factory.openWorkItemOnGitHub", msg.key);
@@ -84,27 +106,22 @@ export class CockpitPanel {
     const baseUri = webview.asWebviewUri(distUri).toString().replace(/\/+$/, "");
     const nonce = makeNonce();
 
-    // Rewrite Vite's relative asset paths to webview URIs.
     html = html.replace(/(src|href)="\.?\/?(assets\/[^"]+)"/g, `$1="${baseUri}/$2"`);
-    // Add a nonce to module scripts.
     html = html.replace(/<script /g, `<script nonce="${nonce}" `);
-    // Inject a scoped CSP.
     const csp =
       `default-src 'none'; ` +
       `img-src ${webview.cspSource} https: data:; ` +
       `style-src ${webview.cspSource} 'unsafe-inline'; ` +
       `font-src ${webview.cspSource}; ` +
       `script-src 'nonce-${nonce}' ${webview.cspSource};`;
-    html = html.replace(
-      /<head>/,
-      `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`,
-    );
+    html = html.replace(/<head>/, `<head>\n<meta http-equiv="Content-Security-Policy" content="${csp}">`);
 
     this.panel.webview.html = html;
   }
 
   dispose(): void {
     CockpitPanel.current = undefined;
+    this.activeConsole?.dispose();
     this.panel.dispose();
     while (this.disposables.length) {
       this.disposables.pop()?.dispose();
