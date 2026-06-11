@@ -67,7 +67,7 @@ The extension host owns all sockets and the auth token; webviews receive only fo
    WS deltas keep it live; `EventEmitter` so all views share one source of truth.
 3. **Native UI** — `FactoryPipelineProvider` TreeView (work item → Plan/Code/Test children, status
    ThemeIcons + color, inline actions: open cockpit/console/issue); status bar item
-   (`Factory: 3▶ 1⚠`, spinner when active); activity-bar badge (awaiting-review + anomalies).
+   (`Factory: 3 running, 1 anomaly`, spinner when active); activity-bar badge (awaiting-review + anomalies).
 4. **`webview-ui/`** — Animated cockpit (React + framer-motion): work items travel Plan→Code→Test
    with layout transitions, progress rings, token/cost ticker, anomaly pulse; embedded xterm.js
    (+ addon-fit) bound to `ConsoleSocket`; rollups header from `/api/rollups`.

@@ -1,0 +1,19 @@
+title: factory-vscode
+description: The PARR pipeline cockpit inside your editor.
+author: Olaf Freund
+
+url: "https://olafkfreund.github.io"
+baseurl: "/factory-vscode"
+
+markdown: kramdown
+permalink: /blog/:year/:month/:day/:title/
+
+# Build settings
+future: false
+
+# Files Jekyll should not treat as site content
+exclude:
+  - design/
+  - Gemfile
+  - Gemfile.lock
+  - README.md
