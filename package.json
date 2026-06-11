@@ -1,0 +1,172 @@
+{
+  "name": "factory-vscode",
+  "displayName": "Factory Pipeline Cockpit",
+  "description": "Live PARR pipeline monitoring, animated cockpit, agent console, and notifications for the Factory suite.",
+  "version": "0.0.1",
+  "publisher": "olafkfreund",
+  "license": "MIT",
+  "author": "Olaf Freund",
+  "homepage": "https://olafkfreund.github.io/factory-vscode/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/olafkfreund/factory-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/olafkfreund/factory-vscode/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "factory",
+    "parr",
+    "pipeline",
+    "cfactory",
+    "monitoring"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "factory",
+          "title": "Factory",
+          "icon": "media/factory.svg"
+        }
+      ]
+    },
+    "views": {
+      "factory": [
+        {
+          "id": "factory.pipeline",
+          "name": "Pipeline",
+          "icon": "media/factory.svg",
+          "contextualTitle": "Factory Pipeline"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "factory.pipeline",
+        "contents": "Not connected to CFactory.\n[Connect](command:factory.connect)\nSet the CFactory URL and token in settings, then connect to see the live PARR pipeline."
+      }
+    ],
+    "commands": [
+      {
+        "command": "factory.openCockpit",
+        "title": "Open Cockpit",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.connect",
+        "title": "Connect",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.refresh",
+        "title": "Refresh",
+        "category": "Factory",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "factory.openConsole",
+        "title": "Open Live Console",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.openWorkItemOnGitHub",
+        "title": "Open Work Item on GitHub",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.setToken",
+        "title": "Set CFactory Token",
+        "category": "Factory"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "factory.refresh",
+          "when": "view == factory.pipeline",
+          "group": "navigation"
+        },
+        {
+          "command": "factory.openCockpit",
+          "when": "view == factory.pipeline",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Factory",
+      "properties": {
+        "factory.cfactoryUrl": {
+          "type": "string",
+          "default": "http://localhost:3111",
+          "description": "Base URL of the CFactory backend (REST + WebSocket)."
+        },
+        "factory.autoConnect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Connect to CFactory automatically when the editor starts."
+        },
+        "factory.notifications.level": {
+          "type": "string",
+          "enum": [
+            "off",
+            "important",
+            "all"
+          ],
+          "enumDescriptions": [
+            "No notifications.",
+            "Failures, awaiting-review, and anomalies only.",
+            "All pipeline events, including new and completed work items."
+          ],
+          "default": "important",
+          "description": "Which pipeline events raise editor notifications."
+        },
+        "factory.console.maxLines": {
+          "type": "number",
+          "default": 5000,
+          "description": "Maximum scrollback lines kept in the live agent console."
+        },
+        "factory.poll.intervalMs": {
+          "type": "number",
+          "default": 5000,
+          "description": "REST polling interval (milliseconds) used as a fallback when the live WebSocket is unavailable."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run build:webview && npm run build:ext",
+    "build:ext": "node esbuild.js --production",
+    "build:webview": "npm --prefix webview-ui ci && npm --prefix webview-ui run build",
+    "watch": "node esbuild.js --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package --no-dependencies -o factory-vscode.vsix",
+    "publish:vsce": "vsce publish --no-dependencies",
+    "publish:ovsx": "ovsx publish factory-vscode.vsix --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "@vscode/vsce": "^2.27.0",
+    "esbuild": "^0.21.5",
+    "eslint": "^8.57.0",
+    "ovsx": "^0.9.1",
+    "typescript": "^5.4.5"
+  }
+}
