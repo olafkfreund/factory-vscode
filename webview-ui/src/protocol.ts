@@ -1,9 +1,15 @@
 // Mirror of the host's webview protocol (kept in sync with src/webview/protocol.ts).
 
+export interface TokenUsage {
+  total_tokens: number;
+  cost_usd: number;
+}
+
 export interface ServiceState {
   task_id: string | null;
   status: string | null;
   phase: string | null;
+  usage?: TokenUsage | null;
 }
 
 export interface WorkItem {

@@ -6,6 +6,7 @@
   --fg: #ebdbb2;
   --fg4: #a89984;
   --yellow: #fabd2f;
+  --green: #b8bb26;
   --orange: #fe8019;
   --red: #fb4934;
 }
@@ -29,7 +30,6 @@ body {
   border-bottom: 1px solid var(--bg2);
   padding-bottom: 12px;
 }
-
 .cockpit-header h1 {
   color: var(--yellow);
   font-size: 1.3rem;
@@ -37,12 +37,26 @@ body {
 }
 
 .rollup {
+  display: flex;
+  gap: 16px;
+  align-items: baseline;
+}
+.rollup .stat {
   color: var(--fg4);
   font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.rollup .tokens {
+  color: var(--fg);
+}
+.rollup .cost {
+  color: var(--green);
 }
 .rollup .anomaly {
   color: var(--red);
-  margin-left: 12px;
+}
+.ticker {
+  display: inline-block;
 }
 
 .empty {
@@ -58,12 +72,31 @@ body {
 }
 
 .item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   background: var(--bg0-hard);
   border: 1px solid var(--bg2);
   border-radius: 10px;
   padding: 14px 16px;
 }
+.item.flagged {
+  border-color: var(--red);
+}
 
+.ring {
+  flex-shrink: 0;
+}
+.ring-label {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.item-body {
+  flex: 1;
+  min-width: 0;
+}
 .item-head {
   display: flex;
   align-items: center;
@@ -75,14 +108,9 @@ body {
 }
 .item-head .title {
   flex: 1;
-  color: var(--fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.item-head .pct {
-  color: var(--yellow);
-  font-variant-numeric: tabular-nums;
 }
 .actions button {
   background: var(--bg2);
@@ -98,10 +126,21 @@ body {
   background: var(--bg1);
 }
 
-.stages {
+.flow {
   display: flex;
-  gap: 10px;
+  align-items: center;
   margin-top: 12px;
+}
+.flow-step {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+.connector {
+  height: 2px;
+  background: var(--bg2);
+  flex: 0 0 18px;
+  margin: 0 8px;
 }
 .stage {
   flex: 1;
@@ -117,5 +156,5 @@ body {
   font-size: 0.8rem;
 }
 .stage-status {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
