@@ -9,6 +9,7 @@ import { CockpitPanel, type ConsoleConnector } from "./cockpitPanel";
 import { ConsoleSocket } from "./cfactory/consoleSocket";
 import { FactoryStatusBar } from "./statusBar";
 import { Notifier } from "./notify/notifier";
+import { registerCfactoryMcp } from "./mcp/register";
 
 /** Extract a correlation key from a tree node or a raw key string. */
 function keyOf(arg?: WorkItemNode | string): string | undefined {
@@ -23,6 +24,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const auth = new Auth(context.secrets);
   const notifier = new Notifier(store);
   context.subscriptions.push(notifier);
+
+  // Optional: expose CFactory's MCP tools to the IDE assistant where supported.
+  if (registerCfactoryMcp(context, auth)) {
+    output.appendLine("Registered CFactory MCP server with the IDE assistant.");
+  }
 
   let socket: LiveSocket | undefined;
   let anomalyTimer: NodeJS.Timeout | undefined;
