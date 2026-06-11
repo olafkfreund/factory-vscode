@@ -78,12 +78,14 @@
       {
         "command": "factory.openConsole",
         "title": "Open Live Console",
-        "category": "Factory"
+        "category": "Factory",
+        "icon": "$(terminal)"
       },
       {
         "command": "factory.openWorkItemOnGitHub",
         "title": "Open Work Item on GitHub",
-        "category": "Factory"
+        "category": "Factory",
+        "icon": "$(github)"
       },
       {
         "command": "factory.setToken",
@@ -103,6 +105,18 @@
           "when": "view == factory.pipeline",
           "group": "navigation"
         }
+      ],
+      "view/item/context": [
+        {
+          "command": "factory.openConsole",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "inline@1"
+        },
+        {
+          "command": "factory.openWorkItemOnGitHub",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "inline@2"
+        }
       ]
     },
     "configuration": {
@@ -117,6 +131,11 @@
           "type": "boolean",
           "default": true,
           "description": "Connect to CFactory automatically when the editor starts."
+        },
+        "factory.githubRepo": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub repository (owner/repo) used to build work-item issue links from the correlation key. Leave empty to disable 'Open Work Item on GitHub'."
         },
         "factory.notifications.level": {
           "type": "string",
