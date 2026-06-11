@@ -41,3 +41,33 @@ jobs:
         with:
           name: factory-vscode-vsix
           path: factory-vscode.vsix
+
+  e2e:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install VS Code runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
+            libcups2 libdrm2 libgtk-3-0 libgbm1 libasound2 libxkbcommon0 libxdamage1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build webview
+        run: npm run build:webview
+
+      - name: Build extension
+        run: npm run build:ext
+
+      - name: Build e2e tests
+        run: npm run build:e2e
+
+      - name: Run e2e smoke (headless)
+        run: xvfb-run -a npm run test:e2e
