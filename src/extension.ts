@@ -7,6 +7,12 @@ import { StateStore } from "./state/store";
 import { FactoryPipelineProvider, WorkItemNode } from "./pipelineView";
 import { CockpitPanel } from "./cockpitPanel";
 import { FactoryStatusBar } from "./statusBar";
+import { Notifier } from "./notify/notifier";
+
+/** Extract a correlation key from a tree node or a raw key string. */
+function keyOf(arg?: WorkItemNode | string): string | undefined {
+  return typeof arg === "string" ? arg : arg?.item.correlation_key;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Factory");
@@ -14,6 +20,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new StateStore();
   const pipeline = new FactoryPipelineProvider(store);
   const auth = new Auth(context.secrets);
+  const notifier = new Notifier(store);
+  context.subscriptions.push(notifier);
 
   let socket: LiveSocket | undefined;
   const stopSocket = () => {
@@ -95,16 +103,16 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("factory.connect", connect),
     vscode.commands.registerCommand("factory.refresh", () => void connect()),
     vscode.commands.registerCommand("factory.openCockpit", () => CockpitPanel.show(context)),
-    vscode.commands.registerCommand("factory.openConsole", (node?: WorkItemNode) => {
-      const key = node?.item.correlation_key;
+    vscode.commands.registerCommand("factory.openConsole", (arg?: WorkItemNode | string) => {
+      const key = keyOf(arg);
       vscode.window.showInformationMessage(
         key
           ? `Factory: the live agent console for #${key} is implemented in the cockpit milestone.`
           : "Factory: the live agent console is implemented in the cockpit milestone.",
       );
     }),
-    vscode.commands.registerCommand("factory.openWorkItemOnGitHub", (node?: WorkItemNode) => {
-      const key = node?.item.correlation_key;
+    vscode.commands.registerCommand("factory.openWorkItemOnGitHub", (arg?: WorkItemNode | string) => {
+      const key = keyOf(arg);
       const repo = readConfig().githubRepo;
       if (key && repo && /^\d+$/.test(key)) {
         void vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${repo}/issues/${key}`));
