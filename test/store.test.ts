@@ -70,3 +70,13 @@ test("setAnomalies updates count", () => {
   s.setAnomalies([{ kind: "stuck", severity: "high", correlation_key: "1", title: null, detail: "x" }]);
   assert.equal(s.anomalyCount, 1);
 });
+
+test("reviewCount and attentionCount combine review items and anomalies", () => {
+  const s = new StateStore();
+  const reviewItem = wi("3");
+  reviewItem.aifactory.status = "human_review";
+  s.hydrate([wi("1"), reviewItem]);
+  assert.equal(s.reviewCount, 1);
+  s.setAnomalies([{ kind: "stuck", severity: "high", correlation_key: "1", title: null, detail: "x" }]);
+  assert.equal(s.attentionCount, 2);
+});

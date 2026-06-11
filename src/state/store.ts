@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { Anomaly, FeedMessage, LiveProgress, WorkItem } from "../cfactory/types";
+import { classifyStatus } from "../status";
 
 /**
  * Single source of truth for pipeline state, keyed by correlation key.
@@ -92,6 +93,26 @@ export class StateStore extends EventEmitter {
 
   get anomalyCount(): number {
     return this.anomalyList.length;
+  }
+
+  /** Work items with any stage awaiting review. */
+  get reviewCount(): number {
+    let n = 0;
+    for (const item of this.items.values()) {
+      if (
+        classifyStatus(item.pfactory.status) === "review" ||
+        classifyStatus(item.aifactory.status) === "review" ||
+        classifyStatus(item.tfactory.status) === "review"
+      ) {
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /** Total items needing a human: anomalies plus awaiting-review work items. */
+  get attentionCount(): number {
+    return this.anomalyCount + this.reviewCount;
   }
 
   get size(): number {
