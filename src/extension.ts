@@ -21,13 +21,21 @@ export function activate(context: vscode.ExtensionContext): void {
     socket = undefined;
   };
 
-  // Status bar tracks store counts on every change.
-  store.on("change", () => statusBar.setCounts(store.runningCount, store.anomalyCount));
+  const treeView = vscode.window.createTreeView("factory.pipeline", { treeDataProvider: pipeline });
+
+  // Status bar counts and the activity-bar badge track store changes.
+  store.on("change", () => {
+    statusBar.setCounts(store.runningCount, store.anomalyCount);
+    const attention = store.attentionCount;
+    treeView.badge = attention > 0
+      ? { value: attention, tooltip: `${store.anomalyCount} anomalies, ${store.reviewCount} awaiting review` }
+      : undefined;
+  });
 
   context.subscriptions.push(
     output,
     statusBar,
-    vscode.window.registerTreeDataProvider("factory.pipeline", pipeline),
+    treeView,
     new vscode.Disposable(stopSocket),
   );
 
