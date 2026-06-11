@@ -5,6 +5,7 @@ export type NotificationLevel = "off" | "important" | "all";
 export interface FactoryConfig {
   cfactoryUrl: string;
   autoConnect: boolean;
+  githubRepo: string;
   notificationLevel: NotificationLevel;
   consoleMaxLines: number;
   pollIntervalMs: number;
@@ -18,6 +19,7 @@ export function readConfig(): FactoryConfig {
   return {
     cfactoryUrl: (c.get<string>("cfactoryUrl") ?? "http://localhost:3111").replace(/\/+$/, ""),
     autoConnect: c.get<boolean>("autoConnect") ?? true,
+    githubRepo: (c.get<string>("githubRepo") ?? "").trim().replace(/^\/+|\/+$/g, ""),
     notificationLevel: c.get<NotificationLevel>("notifications.level") ?? "important",
     consoleMaxLines: c.get<number>("console.maxLines") ?? 5000,
     pollIntervalMs: c.get<number>("poll.intervalMs") ?? 5000,

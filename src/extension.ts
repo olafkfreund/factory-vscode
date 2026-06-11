@@ -4,7 +4,7 @@ import { Auth } from "./auth";
 import { RestClient, FactoryHttpError } from "./cfactory/restClient";
 import { LiveSocket } from "./cfactory/liveSocket";
 import { StateStore } from "./state/store";
-import { FactoryPipelineProvider } from "./pipelineView";
+import { FactoryPipelineProvider, WorkItemNode } from "./pipelineView";
 import { CockpitPanel } from "./cockpitPanel";
 import { FactoryStatusBar } from "./statusBar";
 
@@ -87,12 +87,21 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("factory.connect", connect),
     vscode.commands.registerCommand("factory.refresh", () => void connect()),
     vscode.commands.registerCommand("factory.openCockpit", () => CockpitPanel.show(context)),
-    vscode.commands.registerCommand("factory.openConsole", () => {
-      vscode.window.showInformationMessage("Factory: the live agent console is implemented in the cockpit milestone.");
+    vscode.commands.registerCommand("factory.openConsole", (node?: WorkItemNode) => {
+      const key = node?.item.correlation_key;
+      vscode.window.showInformationMessage(
+        key
+          ? `Factory: the live agent console for #${key} is implemented in the cockpit milestone.`
+          : "Factory: the live agent console is implemented in the cockpit milestone.",
+      );
     }),
-    vscode.commands.registerCommand("factory.openWorkItemOnGitHub", (url?: string) => {
-      if (url) {
-        void vscode.env.openExternal(vscode.Uri.parse(url));
+    vscode.commands.registerCommand("factory.openWorkItemOnGitHub", (node?: WorkItemNode) => {
+      const key = node?.item.correlation_key;
+      const repo = readConfig().githubRepo;
+      if (key && repo && /^\d+$/.test(key)) {
+        void vscode.env.openExternal(vscode.Uri.parse(`https://github.com/${repo}/issues/${key}`));
+      } else if (key && !repo) {
+        vscode.window.showWarningMessage("Factory: set 'factory.githubRepo' (owner/repo) to open work items on GitHub.");
       } else {
         vscode.window.showInformationMessage("Factory: no work item selected.");
       }

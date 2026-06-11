@@ -1,14 +1,16 @@
 import * as vscode from "vscode";
 import type { StateStore } from "./state/store";
-import type { WorkItem } from "./cfactory/types";
+import type { ServiceState, WorkItem } from "./cfactory/types";
+import { classifyStatus, activeStage, STAGES, STAGE_SERVICE, type StatusCategory, type Stage } from "./status";
+
+export type FactoryNode = WorkItemNode | StageNode;
 
 /**
- * Pipeline tree provider. For the Foundation milestone it renders a live, flat
- * list of work items from the state store (proving the store -> view binding).
- * The full PARR-stage hierarchy, status icons, and inline actions are issue #5.
+ * Two-level pipeline tree: work item -> Plan / Code / Test stages.
+ * Live from the state store; emits on every store change.
  */
-export class FactoryPipelineProvider implements vscode.TreeDataProvider<WorkItemNode> {
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<WorkItemNode | undefined>();
+export class FactoryPipelineProvider implements vscode.TreeDataProvider<FactoryNode> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<FactoryNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private connected = false;
@@ -26,38 +28,94 @@ export class FactoryPipelineProvider implements vscode.TreeDataProvider<WorkItem
     this._onDidChangeTreeData.fire(undefined);
   }
 
-  getTreeItem(element: WorkItemNode): vscode.TreeItem {
+  getTreeItem(element: FactoryNode): vscode.TreeItem {
     return element;
   }
 
-  getChildren(): WorkItemNode[] {
-    if (!this.connected) {
-      return []; // empty -> the contributed "Connect" welcome view shows
+  getChildren(element?: FactoryNode): FactoryNode[] {
+    if (!element) {
+      if (!this.connected) {
+        return []; // empty -> "Connect" welcome view
+      }
+      return this.store.getItems().map((item) => {
+        const percent = this.store.getProgress(item.correlation_key)?.percent ?? null;
+        return new WorkItemNode(item, percent);
+      });
     }
-    return this.store.getItems().map((item) => new WorkItemNode(item, this.store.getProgress(item.correlation_key)?.percent ?? null));
+    if (element instanceof WorkItemNode) {
+      const percent = this.store.getProgress(element.item.correlation_key)?.percent ?? null;
+      return STAGES.map((stage) => new StageNode(element.item, stage, percent));
+    }
+    return [];
   }
 }
 
 export class WorkItemNode extends vscode.TreeItem {
-  constructor(item: WorkItem, percent: number | null) {
-    super(`#${item.correlation_key}${item.title ? ` ${item.title}` : ""}`, vscode.TreeItemCollapsibleState.None);
+  constructor(
+    readonly item: WorkItem,
+    percent: number | null,
+  ) {
+    super(
+      `#${item.correlation_key}${item.title ? ` ${item.title}` : ""}`,
+      vscode.TreeItemCollapsibleState.Collapsed,
+    );
     const stage = activeStage(item);
-    this.description = percent != null ? `${stage} ${Math.round(percent)}%` : stage;
-    this.iconPath = new vscode.ThemeIcon(percent != null ? "sync~spin" : "circle-outline");
+    this.description = stage === "Pending" ? "pending" : percent != null ? `${stage} ${Math.round(percent)}%` : stage;
     this.contextValue = "factory.workItem";
+    this.iconPath = workItemIcon(item);
+    this.tooltip = new vscode.MarkdownString(
+      `**#${item.correlation_key}** ${item.title ?? ""}\n\n` +
+        `- Plan: ${item.pfactory.status ?? "-"}\n` +
+        `- Code: ${item.aifactory.status ?? "-"}\n` +
+        `- Test: ${item.tfactory.status ?? "-"}`,
+    );
   }
 }
 
-/** Coarse label of the stage currently doing something. */
-function activeStage(item: WorkItem): string {
-  if (item.tfactory.status) {
-    return "Test";
+export class StageNode extends vscode.TreeItem {
+  constructor(item: WorkItem, stage: Stage, workItemPercent: number | null) {
+    const svc: ServiceState = item[STAGE_SERVICE[stage]];
+    super(stage, vscode.TreeItemCollapsibleState.None);
+    const cat = classifyStatus(svc.status);
+    const showPercent = stage === activeStage(item) && workItemPercent != null;
+    this.description = [svc.status ?? "-", svc.phase ? `(${svc.phase})` : "", showPercent ? `${Math.round(workItemPercent)}%` : ""]
+      .filter(Boolean)
+      .join(" ");
+    this.iconPath = categoryIcon(cat);
+    this.contextValue = "factory.stage";
   }
-  if (item.aifactory.status) {
-    return "Code";
+}
+
+function workItemIcon(item: WorkItem): vscode.ThemeIcon {
+  // Worst-of the three stages drives the work-item glyph.
+  const cats = [item.pfactory, item.aifactory, item.tfactory].map((s) => classifyStatus(s.status));
+  if (cats.includes("failed")) {
+    return categoryIcon("failed");
   }
-  if (item.pfactory.status) {
-    return "Plan";
+  if (cats.includes("review")) {
+    return categoryIcon("review");
   }
-  return "Pending";
+  if (cats.includes("running")) {
+    return categoryIcon("running");
+  }
+  if (cats.every((c) => c === "done")) {
+    return categoryIcon("done");
+  }
+  return categoryIcon("pending");
+}
+
+function categoryIcon(cat: StatusCategory): vscode.ThemeIcon {
+  switch (cat) {
+    case "running":
+      return new vscode.ThemeIcon("sync~spin", new vscode.ThemeColor("charts.yellow"));
+    case "done":
+      return new vscode.ThemeIcon("pass", new vscode.ThemeColor("charts.green"));
+    case "failed":
+      return new vscode.ThemeIcon("error", new vscode.ThemeColor("charts.red"));
+    case "review":
+      return new vscode.ThemeIcon("eye", new vscode.ThemeColor("charts.orange"));
+    case "pending":
+    default:
+      return new vscode.ThemeIcon("circle-outline", new vscode.ThemeColor("disabledForeground"));
+  }
 }
