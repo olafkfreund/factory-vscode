@@ -102,7 +102,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("factory.connect", connect),
     vscode.commands.registerCommand("factory.refresh", () => void connect()),
-    vscode.commands.registerCommand("factory.openCockpit", () => CockpitPanel.show(context)),
+    vscode.commands.registerCommand("factory.openCockpit", () => CockpitPanel.show(context, store)),
     vscode.commands.registerCommand("factory.openConsole", (arg?: WorkItemNode | string) => {
       const key = keyOf(arg);
       vscode.window.showInformationMessage(
