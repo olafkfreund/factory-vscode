@@ -119,6 +119,12 @@
         }
       ]
     },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "factory.cfactory",
+        "label": "Factory (CFactory)"
+      }
+    ],
     "configuration": {
       "title": "Factory",
       "properties": {
