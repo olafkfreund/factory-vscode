@@ -146,6 +146,9 @@
       }
     }
   },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
   "scripts": {
     "vscode:prepublish": "npm run build",
     "build": "npm run build:webview && npm run build:ext",
@@ -162,6 +165,7 @@
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^7.13.0",
     "@typescript-eslint/parser": "^7.13.0",
     "@vscode/vsce": "^2.27.0",
