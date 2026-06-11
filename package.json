@@ -154,6 +154,7 @@
     "watch": "node esbuild.js --watch",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext ts",
+    "test": "node --import tsx --test test/*.test.ts",
     "package": "vsce package --no-dependencies -o factory-vscode.vsix",
     "publish:vsce": "vsce publish --no-dependencies",
     "publish:ovsx": "ovsx publish factory-vscode.vsix --no-dependencies"
@@ -167,6 +168,7 @@
     "esbuild": "^0.21.5",
     "eslint": "^8.57.0",
     "ovsx": "^0.9.1",
+    "tsx": "^4.16.2",
     "typescript": "^5.4.5"
   }
 }
