@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import { readConfig, onConfigChange } from "./config";
 import { Auth } from "./auth";
 import { RestClient, FactoryHttpError } from "./cfactory/restClient";
+import { LiveSocket } from "./cfactory/liveSocket";
+import { StateStore } from "./state/store";
 import { FactoryPipelineProvider } from "./pipelineView";
 import { CockpitPanel } from "./cockpitPanel";
 import { FactoryStatusBar } from "./statusBar";
@@ -9,38 +11,60 @@ import { FactoryStatusBar } from "./statusBar";
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Factory");
   const statusBar = new FactoryStatusBar();
-  const pipeline = new FactoryPipelineProvider();
+  const store = new StateStore();
+  const pipeline = new FactoryPipelineProvider(store);
   const auth = new Auth(context.secrets);
+
+  let socket: LiveSocket | undefined;
+  const stopSocket = () => {
+    socket?.close();
+    socket = undefined;
+  };
+
+  // Status bar tracks store counts on every change.
+  store.on("change", () => statusBar.setCounts(store.runningCount, store.anomalyCount));
 
   context.subscriptions.push(
     output,
     statusBar,
     vscode.window.registerTreeDataProvider("factory.pipeline", pipeline),
+    new vscode.Disposable(stopSocket),
   );
 
-  /** Build a client bound to the current config + stored token. */
   const makeClient = (): RestClient => {
     const cfg = readConfig();
     return new RestClient({ baseUrl: cfg.cfactoryUrl, getToken: () => auth.getToken() });
   };
 
-  // Connect: verify connectivity (health) and prove the data path (workitems).
-  // The live WebSocket subscription and the rich tree land in issues #4 and #5.
+  // Connect: hydrate from REST, then keep current via the live WebSocket.
   const connect = async () => {
     const cfg = readConfig();
+    stopSocket();
     statusBar.setState("connecting");
     pipeline.setConnected(false);
     const client = makeClient();
     try {
       const health = await client.health();
-      const items = await client.workItems();
+      const [items, anomalies] = await Promise.all([client.workItems(), safeAnomalies(client)]);
+      store.hydrate(items);
+      store.setAnomalies(anomalies);
       statusBar.setState("connected");
       pipeline.setConnected(true);
       output.appendLine(
         `Connected to CFactory ${health.service} v${health.version} at ${cfg.cfactoryUrl} — ${items.length} work item(s).`,
       );
-      vscode.window.setStatusBarMessage(`Factory: connected (${items.length} work items)`, 4000);
+
+      // Live feed keeps the store current; status bar falls back to "connecting"
+      // visuals while the socket is down, but REST data remains shown.
+      socket = new LiveSocket({
+        baseUrl: cfg.cfactoryUrl,
+        getToken: () => auth.getToken(),
+        onMessage: (msg) => store.applyFeed(msg),
+        onOpen: () => output.appendLine("Live feed connected."),
+        onClose: () => output.appendLine("Live feed closed; will reconnect."),
+      });
     } catch (err) {
+      stopSocket();
       statusBar.setState("offline");
       pipeline.setConnected(false);
       if (err instanceof FactoryHttpError && err.isUnauthorized) {
@@ -61,10 +85,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("factory.connect", connect),
-    vscode.commands.registerCommand("factory.refresh", () => {
-      pipeline.refresh();
-      void connect();
-    }),
+    vscode.commands.registerCommand("factory.refresh", () => void connect()),
     vscode.commands.registerCommand("factory.openCockpit", () => CockpitPanel.show(context)),
     vscode.commands.registerCommand("factory.openConsole", () => {
       vscode.window.showInformationMessage("Factory: the live agent console is implemented in the cockpit milestone.");
@@ -93,4 +114,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // Disposables registered on the context are cleaned up by VS Code.
+}
+
+/** Anomalies are best-effort; never fail a connect because of them. */
+async function safeAnomalies(client: RestClient) {
+  try {
+    return await client.anomalies();
+  } catch {
+    return [];
+  }
 }
