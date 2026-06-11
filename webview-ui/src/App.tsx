@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ProgressRing } from "./ProgressRing";
-import { vscodeApi, type CockpitState, type HostToWebview, type WorkItem } from "./protocol";
+import { Console } from "./Console";
+import { vscodeApi, type CockpitState, type ConsoleStatus, type HostToWebview, type WorkItem } from "./protocol";
 
 const STAGES = [
   { label: "Plan", svc: "pfactory" },
@@ -66,10 +67,42 @@ function AnimatedNumber({ value, prefix = "" }: { value: number; prefix?: string
 
 export function App() {
   const [state, setState] = useState<CockpitState>({ items: [], progress: {}, anomalies: [] });
+  const [consoleKey, setConsoleKey] = useState<string | null>(null);
+  const [consoleStatus, setConsoleStatus] = useState<ConsoleStatus | null>(null);
+  const consoleKeyRef = useRef<string | null>(null);
+  const writerRef = useRef<(base64: string) => void>(() => {});
+
+  const registerWriter = useCallback((w: (base64: string) => void) => {
+    writerRef.current = w;
+  }, []);
+
+  const closeConsole = useCallback(() => {
+    vscodeApi().postMessage({ type: "closeConsole" });
+    consoleKeyRef.current = null;
+    setConsoleKey(null);
+    setConsoleStatus(null);
+  }, []);
 
   useEffect(() => {
     const onMessage = (ev: MessageEvent<HostToWebview>) => {
-      if (ev.data?.type === "state") setState(ev.data.state);
+      const msg = ev.data;
+      if (!msg) return;
+      switch (msg.type) {
+        case "state":
+          setState(msg.state);
+          break;
+        case "consoleOpen":
+          consoleKeyRef.current = msg.key;
+          setConsoleKey(msg.key);
+          setConsoleStatus(null);
+          break;
+        case "console":
+          if (msg.key === consoleKeyRef.current) writerRef.current(msg.data);
+          break;
+        case "consoleStatus":
+          if (msg.key === consoleKeyRef.current) setConsoleStatus(msg.status);
+          break;
+      }
     };
     window.addEventListener("message", onMessage);
     vscodeApi().postMessage({ type: "ready" });
@@ -172,6 +205,15 @@ export function App() {
           })}
         </AnimatePresence>
       </div>
+
+      {consoleKey && (
+        <Console
+          title={`#${consoleKey} agent console`}
+          status={consoleStatus}
+          registerWriter={registerWriter}
+          onClose={closeConsole}
+        />
+      )}
     </div>
   );
 }
