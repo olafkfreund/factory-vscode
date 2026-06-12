@@ -160,6 +160,16 @@ export class HandoverWorkflow {
     return this.makeAgentFactory(factory);
   }
 
+  /** Every registered project (for the Show/Forget Project commands). */
+  registryEntries(): Array<{ remoteUrl: string; aifactory?: string; tfactory?: string }> {
+    return this.registry.entries();
+  }
+
+  /** Forget all factory registrations for a git remote URL. */
+  forgetProject(remoteUrl: string): void {
+    this.registry.forget(remoteUrl);
+  }
+
   /**
    * Determine which factory service a work item is currently active in and
    * return the corresponding task ID. Returns undefined if no active task.

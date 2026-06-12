@@ -62,15 +62,17 @@ export class Notifier implements vscode.Disposable {
         void vscode.commands.executeCommand("factory.openConsole", e.key);
       } else if (pick === "View on GitHub") {
         void vscode.commands.executeCommand("factory.openWorkItemOnGitHub", e.key);
+      } else if (pick === "Stop Agent") {
+        void vscode.commands.executeCommand("factory.stopTask", e.key);
       }
     };
 
     switch (e.kind) {
       case "failed":
-        void vscode.window.showWarningMessage(`Factory: ${label}${stage} failed`, "Open Console", "View on GitHub").then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label}${stage} failed`, "Open Console", "Stop Agent", "View on GitHub").then(handle);
         break;
       case "anomaly":
-        void vscode.window.showWarningMessage(`Factory: ${label} ${e.detail ?? "anomaly"}`, "Open Console", "View on GitHub").then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label} ${e.detail ?? "anomaly"}`, "Open Console", "Stop Agent", "View on GitHub").then(handle);
         break;
       case "review":
         void vscode.window.showWarningMessage(`Factory: ${label}${stage} awaiting review`, "Review Now", "Open Console").then(handle);

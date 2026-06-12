@@ -36,6 +36,21 @@ export class ProjectRegistry {
     }
   }
 
+  /** Every registered remote URL and its factory project IDs. */
+  entries(): Array<{ remoteUrl: string; aifactory?: string; tfactory?: string }> {
+    const reg = this.all();
+    return Object.keys(reg).map((remoteUrl) => ({ remoteUrl, ...reg[remoteUrl] }));
+  }
+
+  /** Forget all registrations for a remote URL. */
+  forget(remoteUrl: string): void {
+    const reg = this.all();
+    if (reg[remoteUrl]) {
+      delete reg[remoteUrl];
+      void this.state.update(KEY, reg);
+    }
+  }
+
   private all(): Registry {
     return (this.state.get<Registry>(KEY) ?? {});
   }

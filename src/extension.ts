@@ -12,6 +12,7 @@ import { FactoryStatusBar } from "./statusBar";
 import { Notifier } from "./notify/notifier";
 import { registerCfactoryMcp } from "./mcp/register";
 import { HandoverWorkflow } from "./handover/workflow";
+import type { AgentFactoryClient, Task } from "./handover/client";
 import { showPlanPreview } from "./planPreview/panel";
 import { HumanReviewPanel } from "./review/panel";
 
@@ -348,47 +349,133 @@ export function activate(context: vscode.ExtensionContext): void {
     // ── Human review ────────────────────────────────────────────────────────
 
     vscode.commands.registerCommand("factory.reviewTask", async (arg?: WorkItemNode | string) => {
-      const key = keyOf(arg);
-      const items = store.getItems();
-      let item = key ? items.find((i) => i.correlation_key === key) : undefined;
-
-      if (!item) {
-        const reviewable = items.filter((i) =>
-          [i.aifactory.status, i.tfactory.status].some((s) => s && /review|approval|awaiting|human/i.test(s))
-        );
-        const all = reviewable.length ? reviewable : items;
-        if (!all.length) {
-          vscode.window.showInformationMessage("Factory: no running tasks to review.");
-          return;
-        }
-        const picks = all.map((i) => ({
-          label: parseCorrelationKey(i.correlation_key).label,
-          description: i.title ?? "",
-          item: i,
-        }));
-        const chosen = await vscode.window.showQuickPick(picks, { title: "Factory: select task to review" });
-        if (!chosen) { return; }
-        item = chosen.item;
+      const resolved = await resolveActiveTaskFromArg(arg, { title: "Factory: select task to review" });
+      if (resolved) {
+        HumanReviewPanel.show(context, resolved.client, resolved.task, resolved.label);
       }
+    }),
 
-      const resolved = handover.resolveActiveTask(
-        item.aifactory.task_id, item.tfactory.task_id,
-        item.aifactory.status,  item.tfactory.status,
+    // ── Task control: stop / logs ─────────────────────────────────────────────
+
+    vscode.commands.registerCommand("factory.stopTask", async (arg?: WorkItemNode | string) => {
+      const resolved = await resolveActiveTaskFromArg(arg, { title: "Factory: select task to stop" });
+      if (!resolved) { return; }
+      const confirm = await vscode.window.showWarningMessage(
+        `Factory: stop the ${resolved.label} agent for "${resolved.task.title ?? resolved.task.id.slice(0, 8)}"?`,
+        { modal: true },
+        "Stop Agent",
       );
-      if (!resolved) {
-        vscode.window.showInformationMessage("Factory: no active task found for this work item.");
+      if (confirm !== "Stop Agent") { return; }
+      try {
+        await resolved.client.stopTask(resolved.task.id);
+        vscode.window.showInformationMessage(`Factory: ${resolved.label} agent stopped.`);
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: could not stop task — ${(err as Error).message}`);
+      }
+    }),
+
+    vscode.commands.registerCommand("factory.viewLogs", async (arg?: WorkItemNode | string) => {
+      const resolved = await resolveActiveTaskFromArg(arg, { title: "Factory: select task to view logs" });
+      if (!resolved) { return; }
+      try {
+        const logs = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: "Factory: fetching logs…", cancellable: false },
+          () => resolved.client.getTaskLogs(resolved.task.id),
+        );
+        const doc = await vscode.workspace.openTextDocument({
+          content: logs || "(no logs returned)",
+          language: "log",
+        });
+        await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside });
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: could not load logs — ${(err as Error).message}`);
+      }
+    }),
+
+    // ── Connection & project registry control ─────────────────────────────────
+
+    vscode.commands.registerCommand("factory.disconnect", () => {
+      stopSocket();
+      statusBar.setState("offline");
+      pipeline.setConnected(false);
+      store.clear();
+      output.appendLine("Disconnected by user.");
+      vscode.window.showInformationMessage("Factory: disconnected.");
+    }),
+
+    vscode.commands.registerCommand("factory.showProject", async () => {
+      const entries = handover.registryEntries();
+      if (!entries.length) {
+        vscode.window.showInformationMessage("Factory: no projects registered yet.");
         return;
       }
-
-      const client = handover.getFactoryClient(resolved.factory);
-      try {
-        const task = await client.getTask(resolved.taskId);
-        HumanReviewPanel.show(context, client, task, FACTORY_LABEL[resolved.factory]);
-      } catch (err) {
-        vscode.window.showErrorMessage(`Factory: could not load task — ${(err as Error).message}`);
+      const picks = entries.map((e) => ({
+        label: e.remoteUrl,
+        description: [e.aifactory ? `AI ${e.aifactory.slice(0, 8)}` : "", e.tfactory ? `T ${e.tfactory.slice(0, 8)}` : ""].filter(Boolean).join("  ·  "),
+        remoteUrl: e.remoteUrl,
+      }));
+      const chosen = await vscode.window.showQuickPick(picks, { title: "Factory: registered projects — pick to forget" });
+      if (!chosen) { return; }
+      const confirm = await vscode.window.showWarningMessage(
+        `Factory: forget the registration for ${chosen.remoteUrl}? The next Send to Code/Test will re-register it.`,
+        { modal: true },
+        "Forget",
+      );
+      if (confirm === "Forget") {
+        handover.forgetProject(chosen.remoteUrl);
+        vscode.window.showInformationMessage("Factory: project registration forgotten.");
       }
     }),
   );
+
+  /**
+   * Resolve a work item (from a tree node, key, or a quick-pick) and its active
+   * factory task. Shared by the review / stop / logs commands. Shows the
+   * appropriate message and returns undefined when nothing is resolvable.
+   */
+  async function resolveActiveTaskFromArg(
+    arg: WorkItemNode | string | undefined,
+    opts: { title: string },
+  ): Promise<{ client: AgentFactoryClient; task: Task; label: "AIFactory" | "TFactory" } | undefined> {
+    const key = keyOf(arg);
+    const items = store.getItems();
+    let item = key ? items.find((i) => i.correlation_key === key) : undefined;
+
+    if (!item) {
+      const withTasks = items.filter((i) => i.aifactory.task_id || i.tfactory.task_id);
+      const all = withTasks.length ? withTasks : items;
+      if (!all.length) {
+        vscode.window.showInformationMessage("Factory: no active tasks.");
+        return undefined;
+      }
+      const picks = all.map((i) => ({
+        label: parseCorrelationKey(i.correlation_key).label,
+        description: i.title ?? "",
+        item: i,
+      }));
+      const chosen = await vscode.window.showQuickPick(picks, { title: opts.title });
+      if (!chosen) { return undefined; }
+      item = chosen.item;
+    }
+
+    const resolved = handover.resolveActiveTask(
+      item.aifactory.task_id, item.tfactory.task_id,
+      item.aifactory.status,  item.tfactory.status,
+    );
+    if (!resolved) {
+      vscode.window.showInformationMessage("Factory: no active task found for this work item.");
+      return undefined;
+    }
+
+    const client = handover.getFactoryClient(resolved.factory);
+    try {
+      const task = await client.getTask(resolved.taskId);
+      return { client, task, label: FACTORY_LABEL[resolved.factory] };
+    } catch (err) {
+      vscode.window.showErrorMessage(`Factory: could not load task — ${(err as Error).message}`);
+      return undefined;
+    }
+  }
 
   // Only reconnect when a connection-relevant setting changes, and only if the
   // user actually wants to be connected. Changing notification level, console

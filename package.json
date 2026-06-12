@@ -143,6 +143,28 @@
         "title": "Review Task",
         "category": "Factory",
         "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "factory.stopTask",
+        "title": "Stop Task",
+        "category": "Factory",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "factory.viewLogs",
+        "title": "View Task Logs",
+        "category": "Factory",
+        "icon": "$(output)"
+      },
+      {
+        "command": "factory.disconnect",
+        "title": "Disconnect",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.showProject",
+        "title": "Show Registered Projects",
+        "category": "Factory"
       }
     ],
     "menus": {
@@ -213,6 +235,16 @@
           "command": "factory.sendToTest",
           "when": "view == factory.pipeline && viewItem == factory.workItem",
           "group": "1_actions@3"
+        },
+        {
+          "command": "factory.viewLogs",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "3_control@1"
+        },
+        {
+          "command": "factory.stopTask",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "3_control@2"
         }
       ]
     },
