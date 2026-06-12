@@ -15,6 +15,7 @@ import { HandoverWorkflow } from "./handover/workflow";
 import type { AgentFactoryClient, Task } from "./handover/client";
 import { showPlanPreview } from "./planPreview/panel";
 import { HumanReviewPanel } from "./review/panel";
+import { makeNonce } from "./webview/util";
 
 /** Extract a correlation key from a tree node or a raw key string. */
 function keyOf(arg?: WorkItemNode | string): string | undefined {
@@ -205,6 +206,14 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.showInformationMessage("Factory: CFactory token updated.");
         void connect();
       }
+    }),
+    vscode.commands.registerCommand("factory.connectViaBrowser", () => void connectViaBrowser()),
+    vscode.commands.registerCommand("factory.getToken", async () => {
+      const cfg = readConfig();
+      await vscode.env.openExternal(vscode.Uri.parse(`${cfg.cfactoryUrl}/settings/token`));
+      vscode.window.showInformationMessage(
+        "Factory: opened the CFactory token page. Copy the token, then run 'Factory: Set CFactory Token'.",
+      );
     }),
     vscode.commands.registerCommand("factory.login", async () => {
       try {
@@ -476,6 +485,63 @@ export function activate(context: vscode.ExtensionContext): void {
       return undefined;
     }
   }
+
+  // ── Connect via browser (deep-link token hand-off) ──────────────────────────
+  // The user is already logged into the CFactory web UI; this asks CFactory to
+  // redirect back to the editor with a token, so there is nothing to copy/paste.
+  // A random `state` nonce ties the redirect to this request so a stray page
+  // cannot inject a token. See the CFactory contract in issue #47.
+  let pendingAuthState: string | undefined;
+
+  async function connectViaBrowser(): Promise<void> {
+    const cfg = readConfig();
+    pendingAuthState = makeNonce();
+    // uriScheme adapts to the host editor (vscode / vscodium / cursor / …).
+    const callback = await vscode.env.asExternalUri(
+      vscode.Uri.parse(`${vscode.env.uriScheme}://olafkfreund.factory-vscode/auth-callback`),
+    );
+    const target = vscode.Uri.parse(
+      `${cfg.cfactoryUrl}/connect/vscode?redirect=${encodeURIComponent(callback.toString())}&state=${pendingAuthState}`,
+    );
+    const opened = await vscode.env.openExternal(target);
+    if (opened) {
+      vscode.window.showInformationMessage(
+        "Factory: complete the connection in your browser — the editor will pick up the token automatically.",
+      );
+    } else {
+      pendingAuthState = undefined;
+      vscode.window.showErrorMessage("Factory: could not open the browser for CFactory login.");
+    }
+  }
+
+  context.subscriptions.push(
+    vscode.window.registerUriHandler({
+      handleUri: (uri) => {
+        if (uri.path !== "/auth-callback") {
+          return;
+        }
+        const params = new URLSearchParams(uri.query);
+        const token = params.get("token") ?? "";
+        const state = params.get("state") ?? "";
+        // Reject if we never initiated, or the nonce does not match.
+        if (!pendingAuthState || state !== pendingAuthState) {
+          vscode.window.showWarningMessage("Factory: ignored an unexpected auth callback (state mismatch).");
+          return;
+        }
+        pendingAuthState = undefined;
+        if (!token) {
+          vscode.window.showErrorMessage("Factory: the auth callback did not include a token.");
+          return;
+        }
+        void (async () => {
+          await auth.setToken(token);
+          output.appendLine("Received CFactory token via browser deep link.");
+          vscode.window.showInformationMessage("Factory: connected via browser.");
+          void connect();
+        })();
+      },
+    }),
+  );
 
   // Only reconnect when a connection-relevant setting changes, and only if the
   // user actually wants to be connected. Changing notification level, console

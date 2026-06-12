@@ -55,7 +55,7 @@
     "viewsWelcome": [
       {
         "view": "factory.pipeline",
-        "contents": "Not connected to CFactory.\n[Connect](command:factory.connect)\nSet the CFactory URL and token in settings, then connect to see the live PARR pipeline."
+        "contents": "Not connected to CFactory.\n[Connect via Browser](command:factory.connectViaBrowser)\nOpens CFactory in your browser and picks up the token automatically — no copy-paste.\n[Connect](command:factory.connect)\nConnect using an already-configured URL and token."
       }
     ],
     "commands": [
@@ -90,6 +90,17 @@
       {
         "command": "factory.setToken",
         "title": "Set CFactory Token",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.connectViaBrowser",
+        "title": "Connect via Browser",
+        "category": "Factory",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "factory.getToken",
+        "title": "Get Token from CFactory",
         "category": "Factory"
       },
       {
