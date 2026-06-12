@@ -28,7 +28,18 @@ export function activate(context: vscode.ExtensionContext): void {
   const store = new StateStore();
   const pipeline = new FactoryPipelineProvider(store);
   const auth = new Auth(context.secrets);
-  const notifier = new Notifier(store);
+
+  // Per-item notification mute, persisted in globalState.
+  const MUTED_KEY = "factory.mutedItems";
+  const isMutedItem = (key: string): boolean =>
+    (context.globalState.get<string[]>(MUTED_KEY) ?? []).includes(key);
+  const setMutedItem = (key: string, muted: boolean): void => {
+    const set = new Set(context.globalState.get<string[]>(MUTED_KEY) ?? []);
+    if (muted) { set.add(key); } else { set.delete(key); }
+    void context.globalState.update(MUTED_KEY, [...set]);
+  };
+
+  const notifier = new Notifier(store, isMutedItem);
   context.subscriptions.push(notifier);
 
   // Optional: expose CFactory's MCP tools to the IDE assistant where supported.
@@ -402,6 +413,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     // ── Connection & project registry control ─────────────────────────────────
+
+    vscode.commands.registerCommand("factory.toggleMute", (arg?: WorkItemNode | string) => {
+      const key = keyOf(arg);
+      if (!key) {
+        vscode.window.showInformationMessage("Factory: select a work item to mute or unmute.");
+        return;
+      }
+      const nowMuted = !isMutedItem(key);
+      setMutedItem(key, nowMuted);
+      vscode.window.showInformationMessage(
+        `Factory: notifications ${nowMuted ? "muted" : "unmuted"} for ${parseCorrelationKey(key).label}.`,
+      );
+    }),
 
     vscode.commands.registerCommand("factory.disconnect", () => {
       stopSocket();

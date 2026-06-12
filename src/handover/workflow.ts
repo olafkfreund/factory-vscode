@@ -132,14 +132,35 @@ export class HandoverWorkflow {
         projectId = await this.registerProject(factory, remoteUrl, client);
       }
     } else {
-      // No git remote — find or create a generic project
+      // No git remote — let the user choose an existing project or create one,
+      // rather than silently dropping the task into projects[0].
+      let projects: Awaited<ReturnType<typeof client.listProjects>> = [];
       try {
-        const projects = await client.listProjects();
-        projectId = projects[0]?.id;
-      } catch { /* ignore */ }
-      if (!projectId) {
-        const proj = await client.createProject({ name: "vscode-workspace" });
+        projects = await client.listProjects();
+      } catch { /* listing may be unavailable; fall through to create */ }
+
+      const CREATE = "$(add)  Create a new project…";
+      const picks: vscode.QuickPickItem[] = [
+        ...projects.map((p) => ({ label: p.name, description: p.git_url ?? p.id })),
+        { label: CREATE },
+      ];
+      const chosen = await vscode.window.showQuickPick(picks, {
+        title: "Factory: no git remote — choose a project for this task",
+      });
+      if (!chosen) {
+        throw new Error("Cancelled: no project selected.");
+      }
+      if (chosen.label === CREATE) {
+        const name = await vscode.window.showInputBox({
+          title: "Factory: new project name",
+          value: vscode.workspace.workspaceFolders?.[0]?.name ?? "vscode-workspace",
+          validateInput: (v) => v.trim() ? undefined : "Name is required",
+        });
+        if (!name?.trim()) { throw new Error("Cancelled: project name required."); }
+        const proj = await client.createProject({ name: name.trim() });
         projectId = proj.id;
+      } else {
+        projectId = projects.find((p) => p.name === chosen.label)?.id;
       }
     }
 
@@ -268,17 +289,25 @@ export class HandoverWorkflow {
     if (gitExt) {
       try {
         const api = gitExt.exports.getAPI(1);
-        const repo = api.repositories[0];
-        const remote = repo?.state.remotes.find((r) => r.name === "origin") ?? repo?.state.remotes[0];
-        const url = remote?.fetchUrl ?? remote?.pushUrl;
-        if (url) { return normalizeRemoteUrl(url); }
+        const repos = api.repositories;
+        // More than one repo open → let the user choose which to register.
+        const repo = repos.length > 1 ? await pickRepository(repos) : repos[0];
+        if (repo) {
+          const remote = repo.state.remotes.find((r) => r.name === "origin") ?? repo.state.remotes[0];
+          const url = remote?.fetchUrl ?? remote?.pushUrl;
+          if (url) { return normalizeRemoteUrl(url); }
+        }
       } catch {
         // fall through to child_process
       }
     }
 
-    // 2. Fallback: shell out to git
-    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    // 2. Fallback: shell out to git. Pick the folder when multi-root.
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    if (!folders.length) { return undefined; }
+    const folder = folders.length > 1
+      ? (await vscode.window.showWorkspaceFolderPick({ placeHolder: "Factory: pick the project to register" }))?.uri.fsPath
+      : folders[0].uri.fsPath;
     if (!folder) { return undefined; }
     return new Promise((resolve) => {
       cp.exec("git remote get-url origin", { cwd: folder }, (err, stdout) => {
@@ -303,9 +332,21 @@ function normalizeRemoteUrl(url: string): string {
     .replace(/\.git$/, "");
 }
 
+/** Let the user choose among several open git repositories. */
+async function pickRepository(repos: GitRepository[]): Promise<GitRepository | undefined> {
+  const picks = repos.map((r) => ({
+    label: r.rootUri?.path.split("/").pop() ?? r.rootUri?.path ?? "repository",
+    description: r.state.remotes.find((rm) => rm.name === "origin")?.fetchUrl ?? "",
+    repo: r,
+  }));
+  const chosen = await vscode.window.showQuickPick(picks, { title: "Factory: pick the repository to register" });
+  return chosen?.repo;
+}
+
 // Minimal type shim for the vscode.git extension API
 interface GitExtension { getAPI(version: 1): GitAPI; }
 interface GitAPI      { repositories: GitRepository[]; }
 interface GitRepository {
+  rootUri?: { path: string };
   state: { remotes: Array<{ name: string; fetchUrl?: string; pushUrl?: string }> };
 }

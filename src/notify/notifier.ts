@@ -16,7 +16,14 @@ export class Notifier implements vscode.Disposable {
   private seeded = false;
   private readonly listener: () => void;
 
-  constructor(private readonly store: StateStore) {
+  /**
+   * @param isMuted optional predicate; when it returns true for a correlation
+   *   key, that work item raises no notifications (per-item mute).
+   */
+  constructor(
+    private readonly store: StateStore,
+    private readonly isMuted: (key: string) => boolean = () => false,
+  ) {
     this.listener = () => this.onChange();
     this.store.on("change", this.listener);
   }
@@ -49,6 +56,13 @@ export class Notifier implements vscode.Disposable {
       return;
     }
     if (level === "important" && !IMPORTANT_KINDS.has(e.kind)) {
+      return;
+    }
+    // Globally muted event kinds, and per-item muted work items, stay silent.
+    if (readConfig().mutedKinds.includes(e.kind)) {
+      return;
+    }
+    if (this.isMuted(e.key)) {
       return;
     }
 

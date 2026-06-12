@@ -156,6 +156,12 @@
         "icon": "$(comment-discussion)"
       },
       {
+        "command": "factory.toggleMute",
+        "title": "Mute/Unmute Notifications for Work Item",
+        "category": "Factory",
+        "icon": "$(bell-slash)"
+      },
+      {
         "command": "factory.stopTask",
         "title": "Stop Task",
         "category": "Factory",
@@ -256,6 +262,11 @@
           "command": "factory.stopTask",
           "when": "view == factory.pipeline && viewItem == factory.workItem",
           "group": "3_control@2"
+        },
+        {
+          "command": "factory.toggleMute",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "3_control@3"
         }
       ]
     },
@@ -312,6 +323,21 @@
           ],
           "default": "important",
           "description": "Which pipeline events raise editor notifications."
+        },
+        "factory.notifications.mutedKinds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "new",
+              "complete",
+              "failed",
+              "review",
+              "anomaly"
+            ]
+          },
+          "default": [],
+          "description": "Event kinds to never notify about, regardless of notification level. Mute individual work items from the pipeline tree's context menu."
         },
         "factory.console.maxLines": {
           "type": "number",
