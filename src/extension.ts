@@ -249,6 +249,30 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const FACTORY_LABEL = { aifactory: "AIFactory", tfactory: "TFactory" } as const;
 
+  /**
+   * Capture a multi-paragraph description in a real editor buffer instead of a
+   * single-line input box: opens an untitled markdown document pre-filled with
+   * the active editor selection, then waits for the user to confirm via a
+   * notification button. Returns the body with the instruction comment stripped,
+   * or undefined if cancelled.
+   */
+  async function captureDescription(opts: { instruction: string; submitLabel: string }): Promise<string | undefined> {
+    const active = vscode.window.activeTextEditor;
+    const selection = active && !active.selection.isEmpty ? active.document.getText(active.selection) : "";
+    const header = `<!-- ${opts.instruction}\n     Write below, then click "${opts.submitLabel}". You can close this buffer without saving. -->\n\n`;
+    const doc = await vscode.workspace.openTextDocument({ content: header + selection, language: "markdown" });
+    await vscode.window.showTextDocument(doc, { preview: false });
+    const pick = await vscode.window.showInformationMessage(
+      `Factory: ${opts.instruction}`,
+      { modal: false },
+      opts.submitLabel,
+      "Cancel",
+    );
+    if (pick !== opts.submitLabel) { return undefined; }
+    const body = doc.getText().replace(/<!--[\s\S]*?-->/g, "").trim();
+    return body || undefined;
+  }
+
   async function promptIssueNumber(): Promise<number | undefined> {
     const input = await vscode.window.showInputBox({ title: "Factory: issue number", prompt: "Enter the GitHub issue number", validateInput: (v) => /^\d+$/.test(v.trim()) ? undefined : "Must be a number" });
     return input ? parseInt(input.trim(), 10) : undefined;
@@ -304,7 +328,10 @@ export function activate(context: vscode.ExtensionContext): void {
     return vscode.commands.registerCommand(id, async () => {
       const title = await vscode.window.showInputBox({ title: titlePrompt.title, prompt: "Short title", placeHolder: titlePrompt.placeHolder });
       if (!title?.trim()) { return; }
-      const description = await vscode.window.showInputBox({ ...descPrompt, ignoreFocusOut: true });
+      const description = await captureDescription({
+        instruction: descPrompt.prompt,
+        submitLabel: `Send to ${label}`,
+      });
       if (!description?.trim()) { return; }
       try {
         const task = await vscode.window.withProgress(
@@ -326,7 +353,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("factory.createPlan", async () => {
       const title = await vscode.window.showInputBox({ title: "Factory: plan title (optional)", prompt: "Short title for the plan — leave blank to auto-generate." });
       if (title === undefined) { return; }
-      const text = await vscode.window.showInputBox({ title: "Factory: describe the work", prompt: "What should PFactory plan? Paste a description, user story, or requirements.", placeHolder: "Build a REST endpoint that…" });
+      const text = await captureDescription({
+        instruction: "Describe the work for PFactory to plan (a description, user story, or requirements).",
+        submitLabel: "Send to PFactory",
+      });
       if (!text?.trim()) { return; }
       try {
         const session = await handover.startPlanSession(text.trim(), title.trim() || undefined);
