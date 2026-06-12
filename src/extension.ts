@@ -247,6 +247,21 @@ export function activate(context: vscode.ExtensionContext): void {
   // ── Handover commands ───────────────────────────────────────────────────────
   const handover = new HandoverWorkflow(auth, context);
 
+  // globalState key holding the last plan session id (for Resume Plan Session).
+  const PLAN_SESSION_KEY = "factory.lastPlanSession";
+
+  /** Show the plan preview and, on approval, emit the selected issues. */
+  async function emitFromPreview(session: import("./handover/client").PlanSession): Promise<void> {
+    const decision = await showPlanPreview(context, session);
+    if (decision.action !== "approve") {
+      vscode.window.showInformationMessage("Factory: plan discarded.");
+      return;
+    }
+    const result = await handover.approvePlanSession(session.id, decision.issues);
+    void context.globalState.update(PLAN_SESSION_KEY, undefined);
+    vscode.window.showInformationMessage(`Factory: plan emitted — ${result.count} GitHub issue(s) created.`);
+  }
+
   const FACTORY_LABEL = { aifactory: "AIFactory", tfactory: "TFactory" } as const;
 
   /**
@@ -359,16 +374,37 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       if (!text?.trim()) { return; }
       try {
-        const session = await handover.startPlanSession(text.trim(), title.trim() || undefined);
-        const action  = await showPlanPreview(context, session);
-        if (action !== "approve") {
-          vscode.window.showInformationMessage("Factory: plan discarded.");
+        const session = await handover.startPlanSession(
+          text.trim(),
+          title.trim() || undefined,
+          // Persist the session id so it can be resumed after a window reload.
+          (id) => void context.globalState.update(PLAN_SESSION_KEY, id),
+        );
+        await emitFromPreview(session);
+      } catch (err) {
+        if (err instanceof vscode.CancellationError) {
+          vscode.window.showInformationMessage("Factory: plan processing cancelled.");
           return;
         }
-        const result = await handover.approvePlanSession(session.id);
-        vscode.window.showInformationMessage(`Factory: plan emitted — ${result.count} GitHub issue(s) created.`);
-      } catch (err) {
         vscode.window.showErrorMessage(`Factory: createPlan failed — ${(err as Error).message}`);
+      }
+    }),
+
+    vscode.commands.registerCommand("factory.resumePlanSession", async () => {
+      const id = context.globalState.get<string>(PLAN_SESSION_KEY);
+      if (!id) {
+        vscode.window.showInformationMessage("Factory: no plan session to resume.");
+        return;
+      }
+      try {
+        const session = await handover.getPlanSession(id);
+        if (session.status !== "ready" && session.status !== "approved") {
+          vscode.window.showInformationMessage(`Factory: plan session is not ready yet (status: ${session.status}).`);
+          return;
+        }
+        await emitFromPreview(session);
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: could not resume plan — ${(err as Error).message}`);
       }
     }),
 

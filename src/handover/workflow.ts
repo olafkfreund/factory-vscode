@@ -19,19 +19,31 @@ export class HandoverWorkflow {
 
   // ── Plan ────────────────────────────────────────────────────────────────────
 
-  /** Ingest text into PFactory and return the session for preview. */
-  async startPlanSession(text: string, title?: string): Promise<PlanSession> {
+  /**
+   * Ingest text into PFactory and return the session for preview. The processing
+   * wait is cancellable; `onSession` is called with the session id as soon as it
+   * exists so the caller can persist it for resume.
+   */
+  async startPlanSession(
+    text: string,
+    title?: string,
+    onSession?: (id: string) => void,
+  ): Promise<PlanSession> {
     const client = this.makePFactory();
     const { id } = await client.ingest(text, title);
+    onSession?.(id);
 
     return vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: "Factory: Processing plan…", cancellable: false },
-      async () => {
+      { location: vscode.ProgressLocation.Notification, title: "Factory: Processing plan…", cancellable: true },
+      async (_progress, token) => {
         // Start processing (non-blocking on server side)
         await client.process(id);
-        // Poll every 3 s until ready (max 5 min)
+        // Poll every 3 s until ready (max 5 min) or the user cancels.
         const deadline = Date.now() + 5 * 60 * 1000;
         while (Date.now() < deadline) {
+          if (token.isCancellationRequested) {
+            throw new vscode.CancellationError();
+          }
           await delay(3000);
           const session = await client.getSession(id);
           if (session.status === "ready" || session.status === "approved") {
@@ -46,11 +58,19 @@ export class HandoverWorkflow {
     );
   }
 
+  /** Fetch an existing plan session (for Resume Plan Session). */
+  async getPlanSession(sessionId: string): Promise<PlanSession> {
+    return this.makePFactory().getSession(sessionId);
+  }
+
   /** Approve and emit an already-ready session. Returns issues created. */
-  async approvePlanSession(sessionId: string): Promise<{ count: number; numbers: number[] }> {
+  async approvePlanSession(
+    sessionId: string,
+    issues?: Array<{ title: string }>,
+  ): Promise<{ count: number; numbers: number[] }> {
     const client = this.makePFactory();
     await client.approve(sessionId);
-    const result = await client.emit(sessionId);
+    const result = await client.emit(sessionId, issues);
     return { count: result.issues_created, numbers: result.issue_numbers ?? [] };
   }
 

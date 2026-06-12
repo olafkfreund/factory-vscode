@@ -120,6 +120,11 @@
         "icon": "$(edit)"
       },
       {
+        "command": "factory.resumePlanSession",
+        "title": "Resume Plan Session",
+        "category": "Factory"
+      },
+      {
         "command": "factory.sendToCode",
         "title": "Send to Code",
         "category": "Factory",

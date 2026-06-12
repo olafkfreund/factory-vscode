@@ -79,8 +79,13 @@ export class PFactoryClient extends FactoryClient {
     await this.post(`/api/plan/sessions/${encodeURIComponent(id)}/approve`);
   }
 
-  async emit(id: string): Promise<EmitResponse> {
-    return this.post<EmitResponse>(`/api/plan/sessions/${encodeURIComponent(id)}/emit`);
+  async emit(id: string, issues?: Array<{ title: string }>): Promise<EmitResponse> {
+    // Pass the user's selected/renamed issues when present; PFactory may use the
+    // override to emit a subset, and ignores it otherwise (emits the full set).
+    return this.post<EmitResponse>(
+      `/api/plan/sessions/${encodeURIComponent(id)}/emit`,
+      issues ? { issues } : undefined,
+    );
   }
 }
 
