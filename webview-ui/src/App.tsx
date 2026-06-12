@@ -1,5 +1,5 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import { Console } from "./Console";
 import { vscodeApi, type CockpitState, type ConsoleStatus, type HostToWebview, type WorkItem } from "./protocol";
 
@@ -436,11 +436,22 @@ const ItemRow = memo(function ItemRow({ item, percent, flagged, anomalyKind, dis
 });
 
 // ── app ───────────────────────────────────────────────────────────────────────
+// Filter persists across reloads via the webview state API.
+function persistedFilter(): Filter {
+  const s = vscodeApi().getState() as { filter?: Filter } | undefined;
+  return s?.filter ?? "all";
+}
+
 export function App() {
-  const [state, setState]                 = useState<CockpitState>({ items: [], progress: {}, anomalies: [] });
+  const [state, setState]                 = useState<CockpitState>({ items: [], progress: {}, anomalies: [], animations: "full" });
   const [consoleKey, setConsoleKey]       = useState<string | null>(null);
   const [consoleStatus, setConsoleStatus] = useState<ConsoleStatus | null>(null);
-  const [filter, setFilter]               = useState<Filter>("all");
+  const [filter, setFilterState]          = useState<Filter>(persistedFilter);
+
+  const setFilter = useCallback((f: Filter) => {
+    setFilterState(f);
+    vscodeApi().setState({ filter: f });
+  }, []);
   const consoleKeyRef = useRef<string | null>(null);
   const writerRef     = useRef<(b: string) => void>(() => {});
 
@@ -510,8 +521,13 @@ export function App() {
     }
   }
 
+  // "full" honours the OS reduced-motion setting ("user"); "subtle"/"off"
+  // force motion off. MotionConfig disables looping transform/layout animations.
+  const reducedMotion = state.animations === "full" ? "user" : "always";
+
   return (
-    <div className="cockpit">
+    <MotionConfig reducedMotion={reducedMotion}>
+    <div className={`cockpit${state.animations === "off" ? " no-anim" : ""}`}>
       {/* ── header ── */}
       <header className="cockpit-header">
         <div className="header-brand">
@@ -577,5 +593,6 @@ export function App() {
         />
       )}
     </div>
+    </MotionConfig>
   );
 }

@@ -32,6 +32,8 @@ export interface CockpitState {
   items: WorkItem[];
   progress: Record<string, number | null>;
   anomalies: Anomaly[];
+  /** Animation intensity from factory.cockpit.animations. */
+  animations: "full" | "subtle" | "off";
 }
 
 export type ConsoleStatus = "open" | "closed";
@@ -50,6 +52,8 @@ export type WebviewToHost =
 
 interface VsCodeApi {
   postMessage(msg: WebviewToHost): void;
+  getState(): unknown;
+  setState(state: unknown): void;
 }
 
 declare function acquireVsCodeApi(): VsCodeApi;

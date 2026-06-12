@@ -3,6 +3,7 @@ import type { StateStore } from "./state/store";
 import type { CockpitState, WebviewToHost, ConsoleStatus } from "./webview/protocol";
 import { makeNonce } from "./webview/util";
 import { throttle } from "./util/throttle";
+import { readConfig } from "./config";
 
 export interface ConsoleHandlers {
   onData: (base64: string) => void;
@@ -78,6 +79,15 @@ export class CockpitPanel {
     }));
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+    // Re-push state when the animation preference changes so it applies live.
+    this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration("factory.cockpit.animations")) {
+          this.postState();
+        }
+      }),
+    );
   }
 
   private onMessage(msg: WebviewToHost): void {
@@ -112,7 +122,12 @@ export class CockpitPanel {
     for (const item of items) {
       progress[item.correlation_key] = this.store.getProgress(item.correlation_key)?.percent ?? null;
     }
-    const state: CockpitState = { items, progress, anomalies: this.store.getAnomalies() };
+    const state: CockpitState = {
+      items,
+      progress,
+      anomalies: this.store.getAnomalies(),
+      animations: readConfig().cockpitAnimations,
+    };
     void this.panel.webview.postMessage({ type: "state", state });
   }
 

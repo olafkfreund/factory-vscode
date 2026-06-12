@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
 export type NotificationLevel = "off" | "important" | "all";
+export type CockpitAnimations = "full" | "subtle" | "off";
 
 export type EventKind = "new" | "complete" | "failed" | "review" | "anomaly";
 
@@ -13,6 +14,7 @@ export interface FactoryConfig {
   mutedKinds: EventKind[];
   consoleMaxLines: number;
   pollIntervalMs: number;
+  cockpitAnimations: CockpitAnimations;
 }
 
 const SECTION = "factory";
@@ -28,6 +30,7 @@ export function readConfig(): FactoryConfig {
     mutedKinds: c.get<EventKind[]>("notifications.mutedKinds") ?? [],
     consoleMaxLines: c.get<number>("console.maxLines") ?? 5000,
     pollIntervalMs: c.get<number>("poll.intervalMs") ?? 5000,
+    cockpitAnimations: c.get<CockpitAnimations>("cockpit.animations") ?? "full",
   };
 }
 

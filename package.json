@@ -354,6 +354,21 @@
           "default": 5000,
           "description": "REST polling interval (milliseconds) used as a fallback when the live WebSocket is unavailable."
         },
+        "factory.cockpit.animations": {
+          "type": "string",
+          "enum": [
+            "full",
+            "subtle",
+            "off"
+          ],
+          "enumDescriptions": [
+            "All cockpit animations (robots, flow, progress shimmer).",
+            "Reduce motion — disable looping transform/layout animations.",
+            "No animations."
+          ],
+          "default": "full",
+          "description": "Animation intensity for the cockpit webview. The OS 'reduce motion' setting is always honoured regardless of this value."
+        },
         "factory.pfactoryUrl": {
           "type": "string",
           "default": "",

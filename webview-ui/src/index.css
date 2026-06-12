@@ -1,19 +1,29 @@
-/* ── palette (semantic, always dark — Gruvbox-inspired) ─────────────────────── */
+/* ── palette ─────────────────────────────────────────────────────────────────
+   Surfaces follow the editor theme (so the cockpit is legible in light/HC
+   themes); status colours follow the editor's chart palette. Gruvbox values
+   are fallbacks only. */
 :root {
-  --bg0:    #1d2021;
-  --bg1:    #282828;
-  --bg2:    #3c3836;
-  --bg3:    #504945;
-  --fg:     #ebdbb2;
-  --fg4:    #a89984;
-  --yellow: #fabd2f;
-  --green:  #b8bb26;
-  --orange: #fe8019;
-  --red:    #fb4934;
-  --blue:   #83a598;
+  --bg0:    var(--vscode-editor-background, #1d2021);
+  --bg1:    var(--vscode-editorWidget-background, #282828);
+  --bg2:    var(--vscode-widget-border, #3c3836);
+  --bg3:    var(--vscode-input-border, #504945);
+  --fg:     var(--vscode-editor-foreground, #ebdbb2);
+  --fg4:    var(--vscode-descriptionForeground, #a89984);
+  --yellow: var(--vscode-charts-yellow, #fabd2f);
+  --green:  var(--vscode-charts-green, #b8bb26);
+  --orange: var(--vscode-charts-orange, #fe8019);
+  --red:    var(--vscode-charts-red, #fb4934);
+  --blue:   var(--vscode-charts-blue, #83a598);
 }
 
 * { box-sizing: border-box; }
+
+/* Respect the OS reduced-motion preference and the "off" animations setting for
+   any CSS-driven transitions/animations (framer-motion is handled separately). */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+.no-anim * { animation: none !important; transition: none !important; }
 
 body {
   margin: 0;

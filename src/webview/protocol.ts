@@ -5,6 +5,8 @@ export interface CockpitState {
   items: WorkItem[];
   progress: Record<string, number | null>;
   anomalies: Anomaly[];
+  /** Animation intensity from factory.cockpit.animations. */
+  animations: "full" | "subtle" | "off";
 }
 
 export type ConsoleStatus = "open" | "closed";
