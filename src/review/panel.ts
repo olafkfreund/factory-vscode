@@ -6,7 +6,8 @@ type HostMsg =
   | { type: "send"; message: string }
   | { type: "approve" }
   | { type: "reject" }
-  | { type: "refresh" };
+  | { type: "refresh" }
+  | { type: "logs" };
 
 type WebviewMsg =
   | { type: "state"; task: Task; messages: InboxMessage[] }
@@ -78,6 +79,15 @@ export class HumanReviewPanel {
         }
         case "refresh":
           void this.refresh();
+          break;
+        case "logs":
+          try {
+            const logs = await this.client.getTaskLogs(this.task.id);
+            const doc = await vscode.workspace.openTextDocument({ content: logs || "(no logs returned)", language: "log" });
+            await vscode.window.showTextDocument(doc, { preview: true, viewColumn: vscode.ViewColumn.Beside });
+          } catch (err) {
+            this.send({ type: "error", message: (err as Error).message });
+          }
           break;
       }
     });
@@ -198,6 +208,18 @@ function buildHtml(_webview: vscode.Webview, _context: vscode.ExtensionContext):
     margin-top: 4px; text-align: right; }
   .empty { color: var(--vscode-descriptionForeground, #a89984); font-size: 0.82rem;
     text-align: center; padding: 20px 0; }
+  #task-detail { font-size: 0.78rem; color: var(--vscode-descriptionForeground, #a89984);
+    margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  #task-detail .chip { background: var(--vscode-textBlockQuote-background, #282828);
+    padding: 2px 8px; border-radius: 4px; }
+  #task-detail code { color: var(--vscode-charts-blue, #83a598); }
+  .subtasks { list-style: none; margin: 0 0 12px; padding: 0; }
+  .subtasks li { display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    font-size: 0.82rem; }
+  .subtasks .mark { width: 14px; text-align: center; }
+  .subtasks .st-done .mark { color: var(--vscode-charts-green, #b8bb26); }
+  .subtasks .st-active .mark { color: var(--vscode-charts-yellow, #fabd2f); }
+  .subtasks .st-pending { color: var(--vscode-descriptionForeground, #a89984); }
   .plan-actions {
     display: flex; gap: 8px; margin: 12px 0;
     padding: 12px; background: #fabd2f11;
@@ -251,6 +273,11 @@ function buildHtml(_webview: vscode.Webview, _context: vscode.ExtensionContext):
 <body>
 <h1 id="task-title">Loading…</h1>
 <div class="meta" id="task-meta"></div>
+<div id="task-detail"></div>
+<div id="subtasks-wrap" style="display:none">
+  <div class="section-title">Subtasks</div>
+  <ul class="subtasks" id="subtasks"></ul>
+</div>
 <div id="plan-actions" style="display:none" class="plan-actions">
   <span class="plan-label">Agent is waiting for plan approval</span>
   <button class="btn-approve" id="approve-btn">Approve Plan</button>
@@ -258,7 +285,10 @@ function buildHtml(_webview: vscode.Webview, _context: vscode.ExtensionContext):
 </div>
 <div style="display:flex;align-items:center;justify-content:space-between">
   <div class="section-title">Inbox</div>
-  <button class="btn-refresh" id="refresh-btn">Refresh</button>
+  <div style="display:flex;gap:6px">
+    <button class="btn-refresh" id="logs-btn">View Logs</button>
+    <button class="btn-refresh" id="refresh-btn">Refresh</button>
+  </div>
 </div>
 <div class="messages" id="messages"></div>
 <div id="flash"></div>
@@ -284,6 +314,30 @@ function buildHtml(_webview: vscode.Webview, _context: vscode.ExtensionContext):
     document.getElementById('task-meta').innerHTML =
       'ID: ' + esc(task.id) + ' &middot; Factory: ' + pill +
       (task.review_reason ? ' &middot; ' + esc(task.review_reason) : '');
+
+    // Branch / phase context so an approve/reject decision can be made in-IDE.
+    const detail = document.getElementById('task-detail');
+    const bits = [];
+    if (task.branch_name) { bits.push('<span class="chip">branch <code>' + esc(task.branch_name) + '</code></span>'); }
+    if (task.phase) { bits.push('<span class="chip">phase ' + esc(task.phase) + '</span>'); }
+    detail.innerHTML = bits.join('');
+    detail.style.display = bits.length ? 'flex' : 'none';
+
+    // Subtask checklist.
+    const subs = Array.isArray(task.subtasks) ? task.subtasks : [];
+    const wrap = document.getElementById('subtasks-wrap');
+    if (subs.length) {
+      wrap.style.display = 'block';
+      document.getElementById('subtasks').innerHTML = subs.map(function (s) {
+        const st = (s.status || '').toLowerCase();
+        const cls = /done|complete|pass/.test(st) ? 'st-done'
+          : /run|active|progress/.test(st) ? 'st-active' : 'st-pending';
+        const mark = cls === 'st-done' ? '✓' : cls === 'st-active' ? '●' : '○';
+        return '<li class="' + cls + '"><span class="mark">' + mark + '</span>' + esc(s.title || '') + '</li>';
+      }).join('');
+    } else {
+      wrap.style.display = 'none';
+    }
 
     const needsPlanApproval = /plan.*approval|awaiting.*plan|plan_approval/i.test(status);
     document.getElementById('plan-actions').style.display = needsPlanApproval ? 'flex' : 'none';
@@ -325,12 +379,15 @@ function buildHtml(_webview: vscode.Webview, _context: vscode.ExtensionContext):
 
   function refresh() { vscode.postMessage({ type: 'refresh' }); }
 
+  function viewLogs() { vscode.postMessage({ type: 'logs' }); }
+
   // Wire controls via addEventListener — inline onclick handlers are blocked by
   // the nonce-based Content-Security-Policy.
   document.getElementById('send-btn').addEventListener('click', send);
   document.getElementById('approve-btn').addEventListener('click', approve);
   document.getElementById('reject-btn').addEventListener('click', rejectPlan);
   document.getElementById('refresh-btn').addEventListener('click', refresh);
+  document.getElementById('logs-btn').addEventListener('click', viewLogs);
 
   function flash(msg, isErr) {
     const el = document.getElementById('flash');
