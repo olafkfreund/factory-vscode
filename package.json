@@ -91,6 +91,58 @@
         "command": "factory.setToken",
         "title": "Set CFactory Token",
         "category": "Factory"
+      },
+      {
+        "command": "factory.login",
+        "title": "Login (Keycloak)",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.logout",
+        "title": "Logout",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.createPlan",
+        "title": "Create Plan",
+        "category": "Factory",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "factory.sendToCode",
+        "title": "Send to Code",
+        "category": "Factory",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "factory.sendToTest",
+        "title": "Send to Test",
+        "category": "Factory",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "factory.onboardProject",
+        "title": "Onboard Project",
+        "category": "Factory",
+        "icon": "$(repo-push)"
+      },
+      {
+        "command": "factory.createCodeTask",
+        "title": "New Code Task",
+        "category": "Factory",
+        "icon": "$(symbol-method)"
+      },
+      {
+        "command": "factory.createTestTask",
+        "title": "New Test Task",
+        "category": "Factory",
+        "icon": "$(pass)"
+      },
+      {
+        "command": "factory.reviewTask",
+        "title": "Review Task",
+        "category": "Factory",
+        "icon": "$(comment-discussion)"
       }
     ],
     "menus": {
@@ -104,6 +156,21 @@
           "command": "factory.openCockpit",
           "when": "view == factory.pipeline",
           "group": "navigation"
+        },
+        {
+          "command": "factory.createPlan",
+          "when": "view == factory.pipeline",
+          "group": "navigation@3"
+        },
+        {
+          "command": "factory.createCodeTask",
+          "when": "view == factory.pipeline",
+          "group": "2_tasks@1"
+        },
+        {
+          "command": "factory.createTestTask",
+          "when": "view == factory.pipeline",
+          "group": "2_tasks@2"
         }
       ],
       "view/item/context": [
@@ -113,9 +180,39 @@
           "group": "inline@1"
         },
         {
-          "command": "factory.openWorkItemOnGitHub",
+          "command": "factory.reviewTask",
           "when": "view == factory.pipeline && viewItem == factory.workItem",
           "group": "inline@2"
+        },
+        {
+          "command": "factory.openWorkItemOnGitHub",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "inline@3"
+        },
+        {
+          "command": "factory.sendToCode",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "inline@4"
+        },
+        {
+          "command": "factory.sendToTest",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "inline@5"
+        },
+        {
+          "command": "factory.reviewTask",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "1_actions@1"
+        },
+        {
+          "command": "factory.sendToCode",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "1_actions@2"
+        },
+        {
+          "command": "factory.sendToTest",
+          "when": "view == factory.pipeline && viewItem == factory.workItem",
+          "group": "1_actions@3"
         }
       ]
     },
@@ -132,6 +229,21 @@
           "type": "string",
           "default": "http://localhost:3111",
           "description": "Base URL of the CFactory backend (REST + WebSocket)."
+        },
+        "factory.cfactoryToken": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "CFactory bearer token. Takes precedence over the token stored by `Factory: Set Token`. Useful for cluster/CI environments where SecretStorage is unavailable — set this from kubectl or a secrets manager."
+        },
+        "factory.keycloak.issuerUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Keycloak realm issuer URL, e.g. https://keycloak.example.com/realms/factory. When set, Factory: Login opens a browser-based OIDC login and the resulting JWT is used for all CFactory requests."
+        },
+        "factory.keycloak.clientId": {
+          "type": "string",
+          "default": "cfactory",
+          "description": "Keycloak client ID for OIDC login (default: cfactory)."
         },
         "factory.autoConnect": {
           "type": "boolean",
@@ -167,6 +279,21 @@
           "type": "number",
           "default": 5000,
           "description": "REST polling interval (milliseconds) used as a fallback when the live WebSocket is unavailable."
+        },
+        "factory.pfactoryUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Override the derived PFactory base URL (leave empty to auto-derive from factory.cfactoryUrl)."
+        },
+        "factory.aifactoryUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Override the derived AIFactory base URL (leave empty to auto-derive from factory.cfactoryUrl)."
+        },
+        "factory.tfactoryUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Override the derived TFactory base URL (leave empty to auto-derive from factory.cfactoryUrl)."
         }
       }
     }

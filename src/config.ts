@@ -27,12 +27,28 @@ export function readConfig(): FactoryConfig {
 }
 
 /** Fire `cb` whenever any `factory.*` setting changes. */
-export function onConfigChange(cb: () => void): vscode.Disposable {
+export function onConfigChange(cb: (e: vscode.ConfigurationChangeEvent) => void): vscode.Disposable {
   return vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration(SECTION)) {
-      cb();
+      cb(e);
     }
   });
+}
+
+/**
+ * Settings that change *where* or *how* the extension connects to CFactory.
+ * Only these warrant tearing down and re-establishing the live connection.
+ */
+const CONNECTION_KEYS = [
+  "factory.cfactoryUrl",
+  "factory.cfactoryToken",
+  "factory.keycloak.issuerUrl",
+  "factory.keycloak.clientId",
+] as const;
+
+/** True if a configuration change touched any connection-relevant setting. */
+export function affectsConnection(e: vscode.ConfigurationChangeEvent): boolean {
+  return CONNECTION_KEYS.some((k) => e.affectsConfiguration(k));
 }
 
 export const TOKEN_SECRET_KEY = "factory.cfactoryToken";

@@ -32,6 +32,36 @@ test("receives and parses a snapshot frame", async () => {
   assert.equal((got as { item: { correlation_key: string } }).item.correlation_key, "9");
 });
 
+test("stops retrying and fires onAuthError when the handshake is rejected 401", async () => {
+  // A bare HTTP server that rejects the WS upgrade with 401 (never upgrades).
+  const http = await import("node:http");
+  const server = http.createServer((_req, res) => {
+    res.writeHead(401);
+    res.end();
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+
+  let authErrors = 0;
+  let connectAttempts = 0;
+  const sock = new LiveSocket({
+    baseUrl: `http://127.0.0.1:${port}`,
+    onMessage: () => {},
+    onClose: () => { connectAttempts++; },
+    onAuthError: () => { authErrors++; },
+    reconnectInitialMs: 20,
+    reconnectMaxMs: 50,
+  });
+
+  // Wait long enough that several reconnects would have happened if not stopped.
+  await new Promise((r) => setTimeout(r, 250));
+  sock.close();
+  await new Promise<void>((r) => server.close(() => r()));
+
+  assert.equal(authErrors, 1, "onAuthError fires exactly once");
+  assert.ok(connectAttempts <= 1, "does not keep reconnecting after an auth rejection");
+});
+
 test("reconnects after the server drops the connection", async () => {
   const wss = new WebSocketServer({ port: 0 });
   const port = (wss.address() as AddressInfo).port;

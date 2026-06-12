@@ -21,6 +21,20 @@ test("hydrate replaces items and sorts numeric keys", () => {
   assert.equal(s.size, 3);
 });
 
+test("hydrateAll sets items and anomalies in a single change event", () => {
+  const s = new StateStore();
+  let changes = 0;
+  s.on("change", () => { changes++; });
+  s.hydrateAll(
+    [wi("3"), wi("1")],
+    [{ kind: "stuck", severity: "high", correlation_key: "3", title: "t", detail: "d" }],
+  );
+  assert.equal(changes, 1, "exactly one change event for the combined update");
+  assert.equal(s.size, 2);
+  assert.equal(s.anomalyCount, 1);
+  assert.equal(s.getAnomaly("3")?.kind, "stuck");
+});
+
 test("upsert adds and updates", () => {
   const s = new StateStore();
   s.upsert(wi("5", "first"));

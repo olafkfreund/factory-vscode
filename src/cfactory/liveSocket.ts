@@ -7,6 +7,8 @@ export interface LiveSocketOptions {
   onMessage: (msg: FeedMessage) => void;
   onOpen?: () => void;
   onClose?: () => void;
+  /** Called when the server rejects the connection as unauthorized (stops retrying). */
+  onAuthError?: () => void;
   getToken?: () => Promise<string | undefined> | string | undefined;
   /** Heartbeat interval in ms (default 25000). */
   pingIntervalMs?: number;
@@ -25,10 +27,11 @@ export interface LiveSocketOptions {
  */
 export class LiveSocket {
   private readonly url: string;
-  private readonly opts: Required<Omit<LiveSocketOptions, "getToken" | "onOpen" | "onClose">> &
-    Pick<LiveSocketOptions, "getToken" | "onOpen" | "onClose">;
+  private readonly opts: Required<Omit<LiveSocketOptions, "getToken" | "onOpen" | "onClose" | "onAuthError">> &
+    Pick<LiveSocketOptions, "getToken" | "onOpen" | "onClose" | "onAuthError">;
   private ws: WebSocket | null = null;
   private closedByCaller = false;
+  private authFailed = false;
   private backoff: number;
   private pingTimer: NodeJS.Timeout | undefined;
   private reconnectTimer: NodeJS.Timeout | undefined;
@@ -40,6 +43,7 @@ export class LiveSocket {
       onMessage: options.onMessage,
       onOpen: options.onOpen,
       onClose: options.onClose,
+      onAuthError: options.onAuthError,
       getToken: options.getToken,
       pingIntervalMs: options.pingIntervalMs ?? 25_000,
       reconnectInitialMs: options.reconnectInitialMs ?? 1000,
@@ -58,6 +62,14 @@ export class LiveSocket {
     }
     const ws = new this.opts.wsImpl(this.url, { headers });
     this.ws = ws;
+
+    // The server rejected the handshake (e.g. HTTP 401/403) — stop retrying with
+    // the same bad token and let the host prompt for a new one.
+    ws.on("unexpected-response", (_req, res: { statusCode?: number }) => {
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        this.handleAuthError();
+      }
+    });
 
     ws.on("open", () => {
       this.backoff = this.opts.reconnectInitialMs;
@@ -89,16 +101,31 @@ export class LiveSocket {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code: number) => {
       clearInterval(this.pingTimer);
       this.opts.onClose?.();
-      if (this.closedByCaller) {
+      // 1008 (policy violation) and the 44xx range are conventional auth-failure
+      // close codes — treat them like a rejected handshake.
+      if (code === 1008 || code === 4401 || code === 4403) {
+        this.handleAuthError();
+      }
+      if (this.closedByCaller || this.authFailed) {
         return;
       }
       const delay = this.backoff;
       this.backoff = Math.min(this.backoff * 2, this.opts.reconnectMaxMs);
       this.reconnectTimer = setTimeout(() => void this.connect(), delay);
     });
+  }
+
+  /** Stop retrying and notify the host once that auth was rejected. */
+  private handleAuthError(): void {
+    if (this.authFailed) {
+      return;
+    }
+    this.authFailed = true;
+    clearTimeout(this.reconnectTimer);
+    this.opts.onAuthError?.();
   }
 
   close(): void {

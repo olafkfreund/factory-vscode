@@ -54,10 +54,11 @@ export class Notifier implements vscode.Disposable {
 
     const label = `#${e.key}${e.title ? ` ${e.title}` : ""}`;
     const stage = e.stage ? ` (${e.stage})` : "";
-    const buttons = ["Open Console", "View on GitHub"];
 
     const handle = (pick: string | undefined) => {
-      if (pick === "Open Console") {
+      if (pick === "Review Now") {
+        void vscode.commands.executeCommand("factory.reviewTask", e.key);
+      } else if (pick === "Open Console") {
         void vscode.commands.executeCommand("factory.openConsole", e.key);
       } else if (pick === "View on GitHub") {
         void vscode.commands.executeCommand("factory.openWorkItemOnGitHub", e.key);
@@ -66,16 +67,16 @@ export class Notifier implements vscode.Disposable {
 
     switch (e.kind) {
       case "failed":
-        void vscode.window.showWarningMessage(`Factory: ${label}${stage} failed`, ...buttons).then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label}${stage} failed`, "Open Console", "View on GitHub").then(handle);
         break;
       case "anomaly":
-        void vscode.window.showWarningMessage(`Factory: ${label} ${e.detail ?? "anomaly"}`, ...buttons).then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label} ${e.detail ?? "anomaly"}`, "Open Console", "View on GitHub").then(handle);
         break;
       case "review":
-        void vscode.window.showWarningMessage(`Factory: ${label}${stage} awaiting review`, ...buttons).then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label}${stage} awaiting review`, "Review Now", "Open Console").then(handle);
         break;
       case "complete":
-        void vscode.window.showInformationMessage(`Factory: ${label}${stage} complete`, ...buttons).then(handle);
+        void vscode.window.showInformationMessage(`Factory: ${label}${stage} complete`, "Open Console", "View on GitHub").then(handle);
         break;
       case "new":
         void vscode.window.showInformationMessage(`Factory: ${label} started`);

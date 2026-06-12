@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { StateStore } from "./state/store";
 import type { Anomaly, ServiceState, WorkItem } from "./cfactory/types";
 import { classifyStatus, activeStage, STAGES, STAGE_SERVICE, type StatusCategory, type Stage } from "./status";
+import { shortLabel } from "./util/correlationKey";
 
 export type FactoryNode = WorkItemNode | StageNode;
 
@@ -50,25 +51,41 @@ export class FactoryPipelineProvider implements vscode.TreeDataProvider<FactoryN
   }
 }
 
+/**
+/**
+ * Derive a readable title from the work item title string.
+ * Strips the leading "seq-slug" prefix that CFactory sometimes
+ * duplicates into the title field.
+ */
+function readableTitle(item: WorkItem): string {
+  const t = item.title ?? "";
+  if (!t) { return shortLabel(item.correlation_key); }
+  // Remove a leading "NNN-slug-text " prefix if the title mirrors the key slug
+  return t.replace(/^\d{3}-[\w-]+ /, "").trim() || t;
+}
+
 export class WorkItemNode extends vscode.TreeItem {
   constructor(
     readonly item: WorkItem,
     percent: number | null,
     anomaly?: Anomaly,
   ) {
+    const sk    = shortLabel(item.correlation_key);
+    const title = readableTitle(item);
     super(
-      `#${item.correlation_key}${item.title ? ` ${item.title}` : ""}`,
+      `${sk}  ${title}`,
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     const stage = activeStage(item);
-    const base = stage === "Pending" ? "pending" : percent != null ? `${stage} ${Math.round(percent)}%` : stage;
+    const base  = stage === "Pending" ? "pending" : percent != null ? `${stage} ${Math.round(percent)}%` : stage;
     this.description = anomaly ? `${base} — ${anomaly.kind}` : base;
     this.contextValue = "factory.workItem";
     this.iconPath = anomaly
       ? new vscode.ThemeIcon("warning", new vscode.ThemeColor(anomaly.severity === "high" ? "charts.red" : "charts.orange"))
       : workItemIcon(item);
     let tip =
-      `**#${item.correlation_key}** ${item.title ?? ""}\n\n` +
+      `**${sk}** ${title}\n\n` +
+      `\`${item.correlation_key}\`\n\n` +
       `- Plan: ${item.pfactory.status ?? "-"}\n` +
       `- Code: ${item.aifactory.status ?? "-"}\n` +
       `- Test: ${item.tfactory.status ?? "-"}`;

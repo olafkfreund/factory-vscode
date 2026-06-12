@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
-import { readConfig, onConfigChange } from "./config";
+import { readConfig, onConfigChange, affectsConnection } from "./config";
+import { parseCorrelationKey } from "./util/correlationKey";
 import { Auth } from "./auth";
 import { RestClient, FactoryHttpError } from "./cfactory/restClient";
 import { LiveSocket } from "./cfactory/liveSocket";
@@ -10,6 +11,9 @@ import { ConsoleSocket } from "./cfactory/consoleSocket";
 import { FactoryStatusBar } from "./statusBar";
 import { Notifier } from "./notify/notifier";
 import { registerCfactoryMcp } from "./mcp/register";
+import { HandoverWorkflow } from "./handover/workflow";
+import { showPlanPreview } from "./planPreview/panel";
+import { HumanReviewPanel } from "./review/panel";
 
 /** Extract a correlation key from a tree node or a raw key string. */
 function keyOf(arg?: WorkItemNode | string): string | undefined {
@@ -106,8 +110,9 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       const health = await client.health();
       const [items, anomalies] = await Promise.all([client.workItems(), safeAnomalies(client)]);
-      store.hydrate(items);
-      store.setAnomalies(anomalies);
+      // Single combined update so the Notifier seeds its baseline with the
+      // existing anomalies and does not fire a burst of stale notifications.
+      store.hydrateAll(items, anomalies);
       statusBar.setState("connected");
       pipeline.setConnected(true);
       output.appendLine(
@@ -122,6 +127,20 @@ export function activate(context: vscode.ExtensionContext): void {
         onMessage: (msg) => store.applyFeed(msg),
         onOpen: () => output.appendLine("Live feed connected."),
         onClose: () => output.appendLine("Live feed closed; will reconnect."),
+        onAuthError: () => {
+          output.appendLine("Live feed rejected as unauthorized; stopped retrying.");
+          stopSocket();
+          statusBar.setState("offline");
+          void (async () => {
+            const pick = await vscode.window.showWarningMessage(
+              "Factory: CFactory rejected the live connection (unauthorized). Set a token?",
+              "Set Token",
+            );
+            if (pick === "Set Token" && (await auth.promptAndStore())) {
+              void connect();
+            }
+          })();
+        },
       });
 
       // Anomalies are computed by CFactory and not pushed over the feed, so
@@ -186,9 +205,201 @@ export function activate(context: vscode.ExtensionContext): void {
         void connect();
       }
     }),
+    vscode.commands.registerCommand("factory.login", async () => {
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: "Factory: Opening Keycloak login…", cancellable: false },
+          async () => auth.loginWithKeycloak()
+        );
+        vscode.window.showInformationMessage("Factory: Logged in via Keycloak.");
+        void connect();
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: Login failed — ${(err as Error).message}`);
+      }
+    }),
+    vscode.commands.registerCommand("factory.logout", async () => {
+      await auth.logout();
+      vscode.window.showInformationMessage("Factory: Logged out.");
+    }),
   );
 
-  context.subscriptions.push(onConfigChange(() => void connect()));
+  // ── Handover commands ───────────────────────────────────────────────────────
+  const handover = new HandoverWorkflow(auth, context);
+
+  const FACTORY_LABEL = { aifactory: "AIFactory", tfactory: "TFactory" } as const;
+
+  async function promptIssueNumber(): Promise<number | undefined> {
+    const input = await vscode.window.showInputBox({ title: "Factory: issue number", prompt: "Enter the GitHub issue number", validateInput: (v) => /^\d+$/.test(v.trim()) ? undefined : "Must be a number" });
+    return input ? parseInt(input.trim(), 10) : undefined;
+  }
+
+  async function pickIssueNumber(preselectedKey?: string): Promise<number | undefined> {
+    if (preselectedKey) {
+      const n = parseCorrelationKey(preselectedKey).seq;
+      if (n !== undefined) { return n; }
+    }
+    const items = store.getItems().map((it) => {
+      const { seq, label } = parseCorrelationKey(it.correlation_key);
+      return { label, description: it.title ?? "", num: seq };
+    });
+    const manual: vscode.QuickPickItem = { label: "$(edit)  Enter issue number manually…", description: "" };
+    const pick = await vscode.window.showQuickPick([...items, manual], { title: "Factory: select work item" });
+    if (!pick) { return undefined; }
+    if (pick === manual) {
+      return promptIssueNumber();
+    }
+    // An item without a numeric issue number can't be sent directly — fall
+    // through to manual entry instead of silently doing nothing.
+    const num = (pick as typeof items[number]).num;
+    if (num === undefined) {
+      vscode.window.showInformationMessage("Factory: that work item has no GitHub issue number — enter one manually.");
+      return promptIssueNumber();
+    }
+    return num;
+  }
+
+  function registerSendCommand(id: string, factory: "aifactory" | "tfactory"): vscode.Disposable {
+    const label = FACTORY_LABEL[factory];
+    return vscode.commands.registerCommand(id, async (arg?: WorkItemNode | string) => {
+      const num = await pickIssueNumber(keyOf(arg));
+      if (num === undefined) { return; }
+      try {
+        const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Factory: sending #${num} to ${label}…`, cancellable: false }, () => handover.sendToFactory(factory, num));
+        const detail = result.status === "started" ? "agent starting" : "queued (start not confirmed)";
+        vscode.window.showInformationMessage(`Factory: task #${num} sent to ${label} — ${detail}.`);
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: ${id} failed — ${(err as Error).message}`);
+      }
+    });
+  }
+
+  function registerCreateTaskCommand(
+    id: string,
+    factory: "aifactory" | "tfactory",
+    titlePrompt: { title: string; placeHolder: string },
+    descPrompt: { title: string; prompt: string; placeHolder: string },
+  ): vscode.Disposable {
+    const label = FACTORY_LABEL[factory];
+    return vscode.commands.registerCommand(id, async () => {
+      const title = await vscode.window.showInputBox({ title: titlePrompt.title, prompt: "Short title", placeHolder: titlePrompt.placeHolder });
+      if (!title?.trim()) { return; }
+      const description = await vscode.window.showInputBox({ ...descPrompt, ignoreFocusOut: true });
+      if (!description?.trim()) { return; }
+      try {
+        const task = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Factory: creating ${label} task…`, cancellable: false },
+          () => handover.createDirectTask(factory, title.trim(), description.trim()),
+        );
+        const pick = await vscode.window.showInformationMessage(`Factory: ${label} task created — ${task.id.slice(0, 8)}…`, "Review Task");
+        if (pick === "Review Task") {
+          const client = handover.getFactoryClient(factory);
+          HumanReviewPanel.show(context, client, task, label);
+        }
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: ${id} failed — ${(err as Error).message}`);
+      }
+    });
+  }
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("factory.createPlan", async () => {
+      const title = await vscode.window.showInputBox({ title: "Factory: plan title (optional)", prompt: "Short title for the plan — leave blank to auto-generate." });
+      if (title === undefined) { return; }
+      const text = await vscode.window.showInputBox({ title: "Factory: describe the work", prompt: "What should PFactory plan? Paste a description, user story, or requirements.", placeHolder: "Build a REST endpoint that…" });
+      if (!text?.trim()) { return; }
+      try {
+        const session = await handover.startPlanSession(text.trim(), title.trim() || undefined);
+        const action  = await showPlanPreview(context, session);
+        if (action !== "approve") {
+          vscode.window.showInformationMessage("Factory: plan discarded.");
+          return;
+        }
+        const result = await handover.approvePlanSession(session.id);
+        vscode.window.showInformationMessage(`Factory: plan emitted — ${result.count} GitHub issue(s) created.`);
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: createPlan failed — ${(err as Error).message}`);
+      }
+    }),
+
+    registerSendCommand("factory.sendToCode", "aifactory"),
+    registerSendCommand("factory.sendToTest", "tfactory"),
+
+    vscode.commands.registerCommand("factory.onboardProject", async () => {
+      try {
+        const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Factory: registering project…", cancellable: false }, () => handover.onboardCurrentWorkspace());
+        vscode.window.showInformationMessage(`Factory: project registered (${result.remoteUrl}) — ready for Send to Code and Send to Test.`);
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: onboard failed — ${(err as Error).message}`);
+      }
+    }),
+
+    registerCreateTaskCommand(
+      "factory.createCodeTask", "aifactory",
+      { title: "New Code Task — Title", placeHolder: "Implement feature X" },
+      { title: "New Code Task — Description", prompt: "Describe what the agent should code", placeHolder: "Create a REST endpoint that…" },
+    ),
+
+    registerCreateTaskCommand(
+      "factory.createTestTask", "tfactory",
+      { title: "New Test Task — Title", placeHolder: "Test feature X" },
+      { title: "New Test Task — Description", prompt: "Describe what TFactory should test", placeHolder: "Verify that the REST endpoint handles…" },
+    ),
+
+    // ── Human review ────────────────────────────────────────────────────────
+
+    vscode.commands.registerCommand("factory.reviewTask", async (arg?: WorkItemNode | string) => {
+      const key = keyOf(arg);
+      const items = store.getItems();
+      let item = key ? items.find((i) => i.correlation_key === key) : undefined;
+
+      if (!item) {
+        const reviewable = items.filter((i) =>
+          [i.aifactory.status, i.tfactory.status].some((s) => s && /review|approval|awaiting|human/i.test(s))
+        );
+        const all = reviewable.length ? reviewable : items;
+        if (!all.length) {
+          vscode.window.showInformationMessage("Factory: no running tasks to review.");
+          return;
+        }
+        const picks = all.map((i) => ({
+          label: parseCorrelationKey(i.correlation_key).label,
+          description: i.title ?? "",
+          item: i,
+        }));
+        const chosen = await vscode.window.showQuickPick(picks, { title: "Factory: select task to review" });
+        if (!chosen) { return; }
+        item = chosen.item;
+      }
+
+      const resolved = handover.resolveActiveTask(
+        item.aifactory.task_id, item.tfactory.task_id,
+        item.aifactory.status,  item.tfactory.status,
+      );
+      if (!resolved) {
+        vscode.window.showInformationMessage("Factory: no active task found for this work item.");
+        return;
+      }
+
+      const client = handover.getFactoryClient(resolved.factory);
+      try {
+        const task = await client.getTask(resolved.taskId);
+        HumanReviewPanel.show(context, client, task, FACTORY_LABEL[resolved.factory]);
+      } catch (err) {
+        vscode.window.showErrorMessage(`Factory: could not load task — ${(err as Error).message}`);
+      }
+    }),
+  );
+
+  // Only reconnect when a connection-relevant setting changes, and only if the
+  // user actually wants to be connected. Changing notification level, console
+  // scrollback, etc. must not drop the live feed.
+  context.subscriptions.push(
+    onConfigChange((e) => {
+      if (affectsConnection(e) && readConfig().autoConnect) {
+        void connect();
+      }
+    }),
+  );
 
   if (readConfig().autoConnect) {
     void connect();

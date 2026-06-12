@@ -58,6 +58,23 @@ export class StateStore extends EventEmitter {
     this.emitChange();
   }
 
+  /**
+   * Replace work items and anomalies together in a single change event. Used on
+   * connect so subscribers (notably the Notifier seeding its baseline) observe
+   * the full state at once, rather than work-items-then-anomalies as two events
+   * — which would make pre-existing anomalies look brand new and notify falsely.
+   */
+  hydrateAll(items: WorkItem[], anomalies: Anomaly[]): void {
+    this.items = new Map(items.map((i) => [i.correlation_key, i]));
+    for (const key of [...this.progressByKey.keys()]) {
+      if (!this.items.has(key)) {
+        this.progressByKey.delete(key);
+      }
+    }
+    this.anomalyList = anomalies;
+    this.emitChange();
+  }
+
   clear(): void {
     this.items.clear();
     this.progressByKey.clear();

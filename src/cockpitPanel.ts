@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import type { StateStore } from "./state/store";
 import type { CockpitState, WebviewToHost, ConsoleStatus } from "./webview/protocol";
+import { makeNonce } from "./webview/util";
 
 export interface ConsoleHandlers {
   onData: (base64: string) => void;
@@ -19,6 +20,10 @@ export class CockpitPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private activeConsole: vscode.Disposable | undefined;
+  /** Set once the webview has sent its "ready" handshake. */
+  private webviewReady = false;
+  /** A console requested before the webview was ready; flushed on "ready". */
+  private pendingConsoleKey: string | undefined;
 
   static show(context: vscode.ExtensionContext, store: StateStore, connector: ConsoleConnector): CockpitPanel {
     if (CockpitPanel.current) {
@@ -36,6 +41,12 @@ export class CockpitPanel {
 
   /** Open (or switch) the embedded console for a work item, revealing the cockpit. */
   openConsole(key: string): void {
+    // On a cold cockpit the React app has not mounted yet; messages posted to an
+    // unloaded webview are silently dropped. Defer until the "ready" handshake.
+    if (!this.webviewReady) {
+      this.pendingConsoleKey = key;
+      return;
+    }
     this.activeConsole?.dispose();
     void this.panel.webview.postMessage({ type: "consoleOpen", key });
     this.activeConsole = this.connector(key, {
@@ -64,9 +75,17 @@ export class CockpitPanel {
 
   private onMessage(msg: WebviewToHost): void {
     switch (msg.type) {
-      case "ready":
+      case "ready": {
+        this.webviewReady = true;
         this.postState();
+        // Flush a console that was requested before the webview was ready.
+        if (this.pendingConsoleKey) {
+          const key = this.pendingConsoleKey;
+          this.pendingConsoleKey = undefined;
+          this.openConsole(key);
+        }
         break;
+      }
       case "openConsole":
         this.openConsole(msg.key);
         break;
@@ -135,11 +154,3 @@ function fallbackHtml(message: string): string {
 <h1 style="color:#fabd2f">Factory Cockpit</h1><p style="color:#a89984">${message}</p></body></html>`;
 }
 
-function makeNonce(): string {
-  let text = "";
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
-}
