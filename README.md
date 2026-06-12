@@ -61,6 +61,28 @@ CFactory :3111
 5. Open the animated cockpit with `Factory: Open Cockpit`, and a work item's live agent console
    from the tree's inline action or the cockpit.
 
+### Connecting to a hosted CFactory
+
+How you authenticate depends on how the deployment is secured:
+
+- **Local / unsecured CFactory** — nothing to do. Leave `factory.cfactoryToken` empty; the
+  extension connects with no token.
+- **Hosted, with an API token (recommended)** — open CFactory's token page,
+  e.g. `https://<your-cfactory>/settings/token`, copy the token, then run
+  **Factory: Set CFactory Token** (or set `factory.cfactoryToken`). **Point `factory.cfactoryUrl`
+  at the API URL shown on that page, not the cockpit URL** — see the gotcha below.
+- **Hosted, with SSO (Keycloak)** — set `factory.keycloak.issuerUrl` (and `clientId`) and run
+  **Factory: Login (Keycloak)**. The token is obtained and auto-refreshed via your SSO; no paste.
+- **One-click** — where the deployment supports it, **Factory: Connect via Browser** opens
+  CFactory (where you're already logged in) and hands the token back automatically.
+
+> ⚠️ **Cockpit URL vs API URL.** A CFactory cockpit behind an SSO proxy (e.g. oauth2-proxy)
+> only accepts a browser login on its main URL, so a *pasted token* sent there is rejected.
+> Hosted deployments expose a separate **direct API host** for editors/clients
+> (e.g. `https://cfactory-mcp.<domain>`) — use that as `factory.cfactoryUrl` with a pasted token.
+> The `/settings/token` page shows the correct API URL. If you set `factory.keycloak.issuerUrl`,
+> the extension tries SSO login first — leave it blank to use a pasted token.
+
 ## Commands
 
 | Command | What it does |
