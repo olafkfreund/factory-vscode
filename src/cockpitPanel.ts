@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import type { StateStore } from "./state/store";
 import type { CockpitState, WebviewToHost, ConsoleStatus } from "./webview/protocol";
 import { makeNonce } from "./webview/util";
+import { throttle } from "./util/throttle";
 
 export interface ConsoleHandlers {
   onData: (base64: string) => void;
@@ -66,9 +67,15 @@ export class CockpitPanel {
 
     this.panel.webview.onDidReceiveMessage((msg: WebviewToHost) => this.onMessage(msg), null, this.disposables);
 
-    const onChange = () => this.postState();
+    // Coalesce the store's change stream — one post per ~120ms is plenty for a
+    // cockpit and avoids a message storm when many items report progress.
+    const post = throttle(() => this.postState(), 120);
+    const onChange = () => post.trigger();
     this.store.on("change", onChange);
-    this.disposables.push(new vscode.Disposable(() => this.store.off("change", onChange)));
+    this.disposables.push(new vscode.Disposable(() => {
+      this.store.off("change", onChange);
+      post.cancel();
+    }));
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
   }

@@ -157,17 +157,30 @@ export function activate(context: vscode.ExtensionContext): void {
       });
 
       // Anomalies are computed by CFactory and not pushed over the feed, so
-      // refresh them on an interval while connected.
-      const interval = Math.max(cfg.pollIntervalMs, 5000);
-      anomalyTimer = setInterval(() => {
-        void (async () => {
-          try {
-            store.setAnomalies(await makeClient().anomalies());
-          } catch {
-            /* transient; keep last-known */
-          }
-        })();
-      }, interval);
+      // refresh them on an interval while connected. A self-scheduling timer
+      // backs off on failure (up to ~1 min) so we don't hammer a dead server,
+      // and resets to the base interval on the next success.
+      const baseInterval = Math.max(cfg.pollIntervalMs, 5000);
+      const maxInterval = 60_000;
+      let anomalyDelay = baseInterval;
+      const scheduleAnomalyPoll = () => {
+        anomalyTimer = setTimeout(() => {
+          void (async () => {
+            try {
+              store.setAnomalies(await makeClient().anomalies());
+              anomalyDelay = baseInterval;
+            } catch {
+              anomalyDelay = Math.min(anomalyDelay * 2, maxInterval);
+            } finally {
+              // Stop rescheduling once the connection has been torn down.
+              if (socket) {
+                scheduleAnomalyPoll();
+              }
+            }
+          })();
+        }, anomalyDelay);
+      };
+      scheduleAnomalyPoll();
     } catch (err) {
       stopSocket();
       statusBar.setState("offline");

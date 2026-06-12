@@ -3,6 +3,7 @@ import type { StateStore } from "./state/store";
 import type { Anomaly, ServiceState, WorkItem } from "./cfactory/types";
 import { classifyStatus, activeStage, STAGES, STAGE_SERVICE, type StatusCategory, type Stage } from "./status";
 import { shortLabel } from "./util/correlationKey";
+import { throttle } from "./util/throttle";
 
 export type FactoryNode = WorkItemNode | StageNode;
 
@@ -15,9 +16,12 @@ export class FactoryPipelineProvider implements vscode.TreeDataProvider<FactoryN
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private connected = false;
+  // Coalesce the store's change stream so rapid progress frames don't fire a
+  // full tree rebuild each time.
+  private readonly throttledRefresh = throttle(() => this._onDidChangeTreeData.fire(undefined), 120);
 
   constructor(private readonly store: StateStore) {
-    this.store.on("change", () => this.refresh());
+    this.store.on("change", () => this.throttledRefresh.trigger());
   }
 
   setConnected(connected: boolean): void {
@@ -25,6 +29,7 @@ export class FactoryPipelineProvider implements vscode.TreeDataProvider<FactoryN
     this.refresh();
   }
 
+  /** Refresh the whole tree immediately (connection state changes). */
   refresh(): void {
     this._onDidChangeTreeData.fire(undefined);
   }

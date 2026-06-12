@@ -26,6 +26,24 @@ export function classifyStatus(status: string | null | undefined): StatusCategor
   return "running";
 }
 
+/**
+ * Whether a service status represents an in-flight task (not idle/terminal).
+ * Centralised here so every host module agrees on the vocabulary.
+ */
+export function isActiveStatus(status: string | null | undefined): boolean {
+  return status != null && !/^(idle|not_started|done|complete|skipped)$/i.test(status);
+}
+
+/** Whether a status indicates the agent is waiting on a human (review/approval). */
+export function isReviewStatus(status: string | null | undefined): boolean {
+  return status != null && /review|approval|awaiting|human/i.test(status);
+}
+
+/** Whether a status specifically requests plan approval. */
+export function needsPlanApproval(status: string | null | undefined): boolean {
+  return status != null && /plan.*approval|awaiting.*plan|plan_approval/i.test(status);
+}
+
 export type Stage = "Plan" | "Code" | "Test";
 
 /** The factory backing each PARR stage. */

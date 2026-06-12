@@ -6,6 +6,7 @@ import { resolveFactoryUrls } from "./factoryUrls";
 import { FactoryHttpError } from "../cfactory/restClient";
 import type { Auth } from "../auth";
 import { readConfig } from "../config";
+import { isActiveStatus } from "../status";
 
 export class HandoverWorkflow {
   private readonly registry: ProjectRegistry;
@@ -221,8 +222,7 @@ export class HandoverWorkflow {
     aifactoryStatus: string | null | undefined,
     tfactoryStatus: string | null | undefined,
   ): { factory: "aifactory" | "tfactory"; taskId: string } | undefined {
-    const isActive = (s: string | null | undefined) =>
-      s != null && !/^(idle|not_started|done|complete|skipped)$/i.test(s);
+    const isActive = isActiveStatus;
 
     if (aifactoryTaskId && isActive(aifactoryStatus)) {
       return { factory: "aifactory", taskId: aifactoryTaskId };
