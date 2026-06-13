@@ -1,0 +1,24 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: factory-vscode
+  title: factory-vscode
+  description: "The PARR pipeline cockpit inside your editor — live Factory monitoring, animated cockpit, agent console, plan/review surfaces, and notifications for VSCode & compatible IDEs."
+  annotations:
+    github.com/project-slug: olafkfreund/factory-vscode
+    # TechDocs is built from the mkdocs.yml in this directory (docs_dir: techdocs).
+    backstage.io/techdocs-ref: dir:.
+  links:
+    - title: Documentation site
+      url: https://olafkfreund.github.io/factory-vscode/
+    - title: Latest release
+      url: https://github.com/olafkfreund/factory-vscode/releases/latest
+  tags:
+    - vscode
+    - typescript
+    - developer-tools
+spec:
+  type: service
+  lifecycle: production
+  owner: olafkfreund
+  domain: public

@@ -1,0 +1,15 @@
+site_name: factory-vscode
+site_description: The PARR pipeline cockpit inside your editor — for VSCode and compatible IDEs.
+
+# Kept separate from ./docs (which is the Jekyll GitHub Pages site) so the two
+# static-site generators never process each other's files.
+docs_dir: techdocs
+
+nav:
+  - Home: index.md
+  - How to use: how-to.md
+  - Best practices: best-practices.md
+  - Architecture: architecture.md
+
+plugins:
+  - techdocs-core
