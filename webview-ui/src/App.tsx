@@ -2,6 +2,7 @@ import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import { Console } from "./Console";
 import { vscodeApi, type CockpitState, type ConsoleStatus, type HostToWebview, type WorkItem } from "./protocol";
+import { classifyStatus as classify, type StatusCategory } from "./statusVocab";
 
 // ── constants ─────────────────────────────────────────────────────────────────
 const STAGES = [
@@ -10,7 +11,7 @@ const STAGES = [
   { label: "Test",  svc: "tfactory"  },
 ] as const;
 
-type Category = "running" | "done" | "failed" | "review" | "pending";
+type Category = StatusCategory;
 type Filter   = "all" | "running" | "review" | "failed" | "done" | "pending";
 
 const C: Record<Category, string> = {
@@ -29,14 +30,9 @@ const SECTION_LABELS: Record<number, string> = {
 };
 
 // ── pure helpers ─────────────────────────────────────────────────────────────
-function classify(s: string | null | undefined): Category {
-  if (!s) { return "pending"; }
-  const l = s.toLowerCase();
-  if (/(fail|reject|error|block|stuck|cancel)/.test(l)) { return "failed"; }
-  if (/review/.test(l))                                  { return "review"; }
-  if (/(done|complete|merged|emitted|triaged|pass|success|verified)/.test(l)) { return "done"; }
-  return "running";
-}
+// Status classification is the host's single source of truth, synced into
+// ./statusVocab.ts (imported above as `classify`) so the webview can never
+// diverge from src/shared/statusVocab.ts.
 
 /** Strip UUID prefix from correlation key, return "#NNN" */
 function shortKey(key: string): string {

@@ -1,54 +1,21 @@
-// Mirror of the host's webview protocol (kept in sync with src/webview/protocol.ts).
+// The host <-> webview message contract is defined ONCE in
+// src/webview/protocol.ts and synced into ./protocol.gen.ts by
+// `npm run sync:shared` (run automatically via prebuild/pretest). Edit the
+// canonical file, not protocol.gen.ts. This module re-exports those types and
+// adds the webview-only VS Code API runtime helper.
 
-export interface TokenUsage {
-  total_tokens: number;
-  cost_usd: number;
-}
+export type {
+  TokenUsage,
+  ServiceState,
+  WorkItem,
+  Anomaly,
+  CockpitState,
+  ConsoleStatus,
+  HostToWebview,
+  WebviewToHost,
+} from "./protocol.gen";
 
-export interface ServiceState {
-  task_id: string | null;
-  status: string | null;
-  phase: string | null;
-  usage?: TokenUsage | null;
-}
-
-export interface WorkItem {
-  correlation_key: string;
-  title: string | null;
-  pfactory: ServiceState;
-  aifactory: ServiceState;
-  tfactory: ServiceState;
-}
-
-export interface Anomaly {
-  kind: string;
-  severity: string;
-  correlation_key: string;
-  title: string | null;
-  detail: string;
-}
-
-export interface CockpitState {
-  items: WorkItem[];
-  progress: Record<string, number | null>;
-  anomalies: Anomaly[];
-  /** Animation intensity from factory.cockpit.animations. */
-  animations: "full" | "subtle" | "off";
-}
-
-export type ConsoleStatus = "open" | "closed";
-
-export type HostToWebview =
-  | { type: "state"; state: CockpitState }
-  | { type: "consoleOpen"; key: string }
-  | { type: "console"; key: string; data: string }
-  | { type: "consoleStatus"; key: string; status: ConsoleStatus };
-
-export type WebviewToHost =
-  | { type: "ready" }
-  | { type: "openConsole"; key: string }
-  | { type: "closeConsole" }
-  | { type: "openOnGitHub"; key: string };
+import type { WebviewToHost } from "./protocol.gen";
 
 interface VsCodeApi {
   postMessage(msg: WebviewToHost): void;
