@@ -277,28 +277,81 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const FACTORY_LABEL = { aifactory: "AIFactory", tfactory: "TFactory" } as const;
 
+  // ── Compose buffers ─────────────────────────────────────────────────────────
+  // A compose buffer is an untitled markdown doc opened by captureDescription to
+  // collect a multi-paragraph description. The primary submit affordance is an
+  // editor-title button (factory.submitComposeBuffer), contributed via the
+  // editor/title menu and gated by the `factory.isComposeBuffer` context key.
+
+  /** Strip the instruction comment(s) from a compose buffer's text. */
+  const composeBody = (text: string): string => text.replace(/<!--[\s\S]*?-->/g, "").trim();
+
+  interface ComposeBuffer {
+    submitLabel: string;
+    /** Reads the live buffer text and runs the original submit logic. */
+    submit(): Promise<void> | void;
+  }
+
+  // Keyed by document URI string so the editor-title button can look up the
+  // submit logic for whichever compose buffer is active.
+  const composeBuffers = new Map<string, ComposeBuffer>();
+
+  const updateComposeContext = (editor: vscode.TextEditor | undefined): void => {
+    const isCompose = !!editor && composeBuffers.has(editor.document.uri.toString());
+    void vscode.commands.executeCommand("setContext", "factory.isComposeBuffer", isCompose);
+  };
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(updateComposeContext),
+    vscode.workspace.onDidCloseTextDocument((doc) => {
+      composeBuffers.delete(doc.uri.toString());
+    }),
+  );
+
   /**
    * Capture a multi-paragraph description in a real editor buffer instead of a
    * single-line input box: opens an untitled markdown document pre-filled with
-   * the active editor selection, then waits for the user to confirm via a
-   * notification button. Returns the body with the instruction comment stripped,
-   * or undefined if cancelled.
+   * the active editor selection, registers it as a compose buffer so the
+   * editor-title "Send to Factory" button can submit it, and also offers a
+   * secondary notification button. Both affordances route to `opts.submit`.
    */
-  async function captureDescription(opts: { instruction: string; submitLabel: string }): Promise<string | undefined> {
+  async function captureDescription(opts: {
+    instruction: string;
+    submitLabel: string;
+    submit(body: string): Promise<void> | void;
+  }): Promise<void> {
     const active = vscode.window.activeTextEditor;
     const selection = active && !active.selection.isEmpty ? active.document.getText(active.selection) : "";
-    const header = `<!-- ${opts.instruction}\n     Write below, then click "${opts.submitLabel}". You can close this buffer without saving. -->\n\n`;
+    const header = `<!-- ${opts.instruction}\n     Write below, then click "${opts.submitLabel}" in the editor title bar (or the notification). You can close this buffer without saving. -->\n\n`;
     const doc = await vscode.workspace.openTextDocument({ content: header + selection, language: "markdown" });
+    const uriKey = doc.uri.toString();
+
+    let submitted = false;
+    const runSubmit = async (): Promise<void> => {
+      if (submitted) { return; }
+      const body = composeBody(doc.getText());
+      if (!body) {
+        vscode.window.showInformationMessage("Factory: nothing to send — the compose buffer is empty.");
+        return;
+      }
+      submitted = true;
+      composeBuffers.delete(uriKey);
+      updateComposeContext(vscode.window.activeTextEditor);
+      await opts.submit(body);
+    };
+
+    composeBuffers.set(uriKey, { submitLabel: opts.submitLabel, submit: runSubmit });
     await vscode.window.showTextDocument(doc, { preview: false });
-    const pick = await vscode.window.showInformationMessage(
-      `Factory: ${opts.instruction}`,
-      { modal: false },
-      opts.submitLabel,
-      "Cancel",
-    );
-    if (pick !== opts.submitLabel) { return undefined; }
-    const body = doc.getText().replace(/<!--[\s\S]*?-->/g, "").trim();
-    return body || undefined;
+    updateComposeContext(vscode.window.activeTextEditor);
+
+    // Secondary path: a non-blocking notification with the same submit action.
+    void vscode.window
+      .showInformationMessage(`Factory: ${opts.instruction}`, { modal: false }, opts.submitLabel, "Cancel")
+      .then((pick) => {
+        if (pick === opts.submitLabel) {
+          void runSubmit();
+        }
+      });
   }
 
   async function promptIssueNumber(): Promise<number | undefined> {
@@ -356,24 +409,25 @@ export function activate(context: vscode.ExtensionContext): void {
     return vscode.commands.registerCommand(id, async () => {
       const title = await vscode.window.showInputBox({ title: titlePrompt.title, prompt: "Short title", placeHolder: titlePrompt.placeHolder });
       if (!title?.trim()) { return; }
-      const description = await captureDescription({
+      await captureDescription({
         instruction: descPrompt.prompt,
         submitLabel: `Send to ${label}`,
+        submit: async (description) => {
+          try {
+            const task = await vscode.window.withProgress(
+              { location: vscode.ProgressLocation.Notification, title: `Factory: creating ${label} task…`, cancellable: false },
+              () => handover.createDirectTask(factory, title.trim(), description.trim()),
+            );
+            const pick = await vscode.window.showInformationMessage(`Factory: ${label} task created — ${task.id.slice(0, 8)}…`, "Review Task");
+            if (pick === "Review Task") {
+              const client = handover.getFactoryClient(factory);
+              HumanReviewPanel.show(context, client, task, label);
+            }
+          } catch (err) {
+            vscode.window.showErrorMessage(`Factory: ${id} failed — ${(err as Error).message}`);
+          }
+        },
       });
-      if (!description?.trim()) { return; }
-      try {
-        const task = await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `Factory: creating ${label} task…`, cancellable: false },
-          () => handover.createDirectTask(factory, title.trim(), description.trim()),
-        );
-        const pick = await vscode.window.showInformationMessage(`Factory: ${label} task created — ${task.id.slice(0, 8)}…`, "Review Task");
-        if (pick === "Review Task") {
-          const client = handover.getFactoryClient(factory);
-          HumanReviewPanel.show(context, client, task, label);
-        }
-      } catch (err) {
-        vscode.window.showErrorMessage(`Factory: ${id} failed — ${(err as Error).message}`);
-      }
     });
   }
 
@@ -381,26 +435,37 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("factory.createPlan", async () => {
       const title = await vscode.window.showInputBox({ title: "Factory: plan title (optional)", prompt: "Short title for the plan — leave blank to auto-generate." });
       if (title === undefined) { return; }
-      const text = await captureDescription({
+      await captureDescription({
         instruction: "Describe the work for PFactory to plan (a description, user story, or requirements).",
         submitLabel: "Send to PFactory",
+        submit: async (text) => {
+          try {
+            const session = await handover.startPlanSession(
+              text.trim(),
+              title.trim() || undefined,
+              // Persist the session id so it can be resumed after a window reload.
+              (id) => void context.globalState.update(PLAN_SESSION_KEY, id),
+            );
+            await emitFromPreview(session);
+          } catch (err) {
+            if (err instanceof vscode.CancellationError) {
+              vscode.window.showInformationMessage("Factory: plan processing cancelled.");
+              return;
+            }
+            vscode.window.showErrorMessage(`Factory: createPlan failed — ${(err as Error).message}`);
+          }
+        },
       });
-      if (!text?.trim()) { return; }
-      try {
-        const session = await handover.startPlanSession(
-          text.trim(),
-          title.trim() || undefined,
-          // Persist the session id so it can be resumed after a window reload.
-          (id) => void context.globalState.update(PLAN_SESSION_KEY, id),
-        );
-        await emitFromPreview(session);
-      } catch (err) {
-        if (err instanceof vscode.CancellationError) {
-          vscode.window.showInformationMessage("Factory: plan processing cancelled.");
-          return;
-        }
-        vscode.window.showErrorMessage(`Factory: createPlan failed — ${(err as Error).message}`);
+    }),
+
+    vscode.commands.registerCommand("factory.submitComposeBuffer", async () => {
+      const editor = vscode.window.activeTextEditor;
+      const entry = editor && composeBuffers.get(editor.document.uri.toString());
+      if (!entry) {
+        vscode.window.showInformationMessage("Factory: no compose buffer is active.");
+        return;
       }
+      await entry.submit();
     }),
 
     vscode.commands.registerCommand("factory.resumePlanSession", async () => {
@@ -527,6 +592,30 @@ export function activate(context: vscode.ExtensionContext): void {
         remoteUrl: e.remoteUrl,
       }));
       const chosen = await vscode.window.showQuickPick(picks, { title: "Factory: registered projects — pick to forget" });
+      if (!chosen) { return; }
+      const confirm = await vscode.window.showWarningMessage(
+        `Factory: forget the registration for ${chosen.remoteUrl}? The next Send to Code/Test will re-register it.`,
+        { modal: true },
+        "Forget",
+      );
+      if (confirm === "Forget") {
+        handover.forgetProject(chosen.remoteUrl);
+        vscode.window.showInformationMessage("Factory: project registration forgotten.");
+      }
+    }),
+
+    vscode.commands.registerCommand("factory.forgetProject", async () => {
+      const entries = handover.registryEntries();
+      if (!entries.length) {
+        vscode.window.showInformationMessage("Factory: no projects registered yet.");
+        return;
+      }
+      const picks = entries.map((e) => ({
+        label: e.remoteUrl,
+        description: [e.aifactory ? `AI ${e.aifactory.slice(0, 8)}` : "", e.tfactory ? `T ${e.tfactory.slice(0, 8)}` : ""].filter(Boolean).join("  ·  "),
+        remoteUrl: e.remoteUrl,
+      }));
+      const chosen = await vscode.window.showQuickPick(picks, { title: "Factory: registered projects — pick one to forget" });
       if (!chosen) { return; }
       const confirm = await vscode.window.showWarningMessage(
         `Factory: forget the registration for ${chosen.remoteUrl}? The next Send to Code/Test will re-register it.`,
