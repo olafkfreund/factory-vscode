@@ -187,6 +187,17 @@
         "command": "factory.showProject",
         "title": "Show Registered Projects",
         "category": "Factory"
+      },
+      {
+        "command": "factory.forgetProject",
+        "title": "Forget Registered Project",
+        "category": "Factory"
+      },
+      {
+        "command": "factory.submitComposeBuffer",
+        "title": "Send to Factory",
+        "category": "Factory",
+        "icon": "$(rocket)"
       }
     ],
     "menus": {
@@ -215,6 +226,19 @@
           "command": "factory.createTestTask",
           "when": "view == factory.pipeline",
           "group": "2_tasks@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "factory.submitComposeBuffer",
+          "when": "factory.isComposeBuffer"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "factory.submitComposeBuffer",
+          "when": "factory.isComposeBuffer",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
