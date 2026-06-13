@@ -1,30 +1,11 @@
 import type { WorkItem } from "./cfactory/types";
 
-/** Normalised status categories used for icons, colours, and counts. */
-export type StatusCategory = "running" | "done" | "failed" | "review" | "pending";
-
-/**
- * Map a per-service status string (vocabulary varies per factory) to a
- * category. Substring matching keeps this robust to new status names.
- * Pure (no vscode) so it is unit-testable.
- */
-export function classifyStatus(status: string | null | undefined): StatusCategory {
-  if (!status) {
-    return "pending";
-  }
-  const s = status.toLowerCase();
-  if (/(fail|reject|error|block|stuck|cancel)/.test(s)) {
-    return "failed";
-  }
-  if (/review/.test(s)) {
-    return "review";
-  }
-  if (/(done|complete|merged|emitted|triaged|pass|success|verified)/.test(s)) {
-    return "done";
-  }
-  // A present, non-terminal status means work is in flight.
-  return "running";
-}
+// The status-category vocabulary lives in the canonical shared module so the
+// webview can consume the exact same logic (see src/shared/statusVocab.ts and
+// the synced copy at webview-ui/src/statusVocab.ts). Re-exported here so host
+// modules keep importing from "./status".
+export { classifyStatus, type StatusCategory } from "./shared/statusVocab";
+import { classifyStatus } from "./shared/statusVocab";
 
 /**
  * Whether a service status represents an in-flight task (not idle/terminal).
