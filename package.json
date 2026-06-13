@@ -2,7 +2,7 @@
   "name": "factory-vscode",
   "displayName": "Factory Pipeline Cockpit",
   "description": "Live PARR pipeline monitoring, animated cockpit, agent console, and notifications for the Factory suite.",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "publisher": "olafkfreund",
   "license": "MIT",
   "author": "Olaf Freund",
