@@ -3,22 +3,37 @@ kind: Component
 metadata:
   name: factory-vscode
   title: factory-vscode
-  description: "The PARR pipeline cockpit inside your editor — live Factory monitoring, animated cockpit, agent console, plan/review surfaces, and notifications for VSCode & compatible IDEs."
+  description: >-
+    VS Code (and OpenVSX-compatible IDE) extension that brings the live PARR
+    pipeline into the editor — pipeline tree, animated cockpit, live agent
+    console, plan/review surfaces, and notifications. Consumes CFactory's REST +
+    WebSocket API.
   annotations:
     github.com/project-slug: olafkfreund/factory-vscode
-    # TechDocs is built from the mkdocs.yml in this directory (docs_dir: techdocs).
+    backstage.io/source-location: url:https://github.com/olafkfreund/factory-vscode/
+    # TechDocs is built from the mkdocs.yml in this repo (docs_dir: techdocs).
     backstage.io/techdocs-ref: dir:.
-  links:
-    - title: Documentation site
-      url: https://olafkfreund.github.io/factory-vscode/
-    - title: Latest release
-      url: https://github.com/olafkfreund/factory-vscode/releases/latest
   tags:
     - vscode
+    - extension
+    - cockpit
+    - parr
+    - observability
     - typescript
-    - developer-tools
+  links:
+    - url: https://olafkfreund.github.io/factory-vscode/
+      title: Project site and blog
+      icon: web
+    - url: https://github.com/olafkfreund/factory-vscode
+      title: Repository
+      icon: github
+    - url: https://github.com/olafkfreund/factory-vscode/releases/latest
+      title: Latest release
+      icon: github
 spec:
-  type: service
+  type: tool
   lifecycle: production
   owner: olafkfreund
-  domain: public
+  system: factory-suite
+  dependsOn:
+    - component:cfactory
