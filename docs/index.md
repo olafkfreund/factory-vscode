@@ -10,10 +10,12 @@ description: The PARR pipeline cockpit inside your editor, for VSCode and compat
 
 <div class="hero-actions">
   <a class="btn" href="https://github.com/olafkfreund/factory-vscode">View on GitHub</a>
+  <a class="btn secondary" href="{{ '/how-to/' | relative_url }}">How to use</a>
+  <a class="btn secondary" href="{{ '/best-practices/' | relative_url }}">Best practices</a>
   <a class="btn secondary" href="{{ '/blog/' | relative_url }}">Read the blog</a>
 </div>
 
-> Status: pre-0.1, in active development. The build plan and the hardening epic live on the [project board](https://github.com/olafkfreund/factory-vscode/issues).
+> Status: **v1.0.0** — the hardening &amp; UX-cleanup epic has shipped. New to the cockpit? Start with [How to use]({{ '/how-to/' | relative_url }}) and [Best practices]({{ '/best-practices/' | relative_url }}).
 
 `factory-vscode` brings the live Factory software-delivery pipeline into VSCode and compatible IDEs.
 It is a consumer of **CFactory**, the suite's observability tower — so it threads PFactory, AIFactory,
