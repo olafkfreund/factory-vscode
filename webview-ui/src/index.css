@@ -1,207 +1,365 @@
+/* ── palette ─────────────────────────────────────────────────────────────────
+   Surfaces follow the editor theme (so the cockpit is legible in light/HC
+   themes); status colours follow the editor's chart palette. Gruvbox values
+   are fallbacks only. */
 :root {
-  --bg0: #282828;
-  --bg0-hard: #1d2021;
-  --bg1: #3c3836;
-  --bg2: #504945;
-  --fg: #ebdbb2;
-  --fg4: #a89984;
-  --yellow: #fabd2f;
-  --green: #b8bb26;
-  --orange: #fe8019;
-  --red: #fb4934;
+  --bg0:    var(--vscode-editor-background, #1d2021);
+  --bg1:    var(--vscode-editorWidget-background, #282828);
+  --bg2:    var(--vscode-widget-border, #3c3836);
+  --bg3:    var(--vscode-input-border, #504945);
+  --fg:     var(--vscode-editor-foreground, #ebdbb2);
+  --fg4:    var(--vscode-descriptionForeground, #a89984);
+  --yellow: var(--vscode-charts-yellow, #fabd2f);
+  --green:  var(--vscode-charts-green, #b8bb26);
+  --orange: var(--vscode-charts-orange, #fe8019);
+  --red:    var(--vscode-charts-red, #fb4934);
+  --blue:   var(--vscode-charts-blue, #83a598);
 }
+
+* { box-sizing: border-box; }
+
+/* Respect the OS reduced-motion preference and the "off" animations setting for
+   any CSS-driven transitions/animations (framer-motion is handled separately). */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+.no-anim * { animation: none !important; transition: none !important; }
 
 body {
   margin: 0;
-  background: var(--bg0);
-  color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 14px;
+  background: var(--vscode-sideBar-background, var(--bg0));
+  color: var(--vscode-sideBar-foreground, var(--fg));
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
-.cockpit {
-  padding: 20px 24px;
-}
+/* ── header ──────────────────────────────────────────────────────────────────── */
+.cockpit { padding: 10px 12px 120px; }
 
 .cockpit-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--bg2);
-  padding-bottom: 12px;
-}
-.cockpit-header h1 {
-  color: var(--yellow);
-  font-size: 1.3rem;
-  margin: 0;
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, var(--bg2));
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.rollup {
-  display: flex;
-  gap: 16px;
-  align-items: baseline;
+.header-brand { display: flex; align-items: center; gap: 7px; }
+.cockpit-header h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--yellow);
+  letter-spacing: 0.02em;
 }
-.rollup .stat {
+
+.rollup { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stat { color: var(--fg4); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.stat.tokens { color: var(--fg); }
+.stat.cost   { color: var(--green); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 100px;
+}
+.running-badge { background: #fabd2f22; color: var(--yellow); border: 1px solid #fabd2f55; }
+.done-badge    { background: #b8bb2622; color: var(--green);  border: 1px solid #b8bb2655; }
+.anomaly-badge { background: #fb493422; color: var(--red);    border: 1px solid #fb493455; }
+
+.pulse-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--yellow);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+.ticker { display: inline-block; }
+
+.empty { color: var(--fg4); margin: 28px 0; text-align: center; font-size: 0.82rem; }
+
+/* ── filter bar ──────────────────────────────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg2);
   color: var(--fg4);
-  font-size: 0.85rem;
+  border: 1px solid transparent;
+  border-radius: 100px;
+  padding: 2px 9px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.filter-pill:hover { background: var(--bg3); color: var(--fg); }
+.filter-pill.active { background: #fabd2f22; color: var(--yellow); border-color: #fabd2f55; }
+.filter-count {
+  background: var(--bg3);
+  color: var(--fg4);
+  font-size: 0.65rem;
+  padding: 0 4px;
+  border-radius: 100px;
+  font-variant-numeric: tabular-nums;
+  min-width: 16px;
+  text-align: center;
+}
+.filter-pill.active .filter-count { background: #fabd2f33; color: var(--yellow); }
+
+/* ── section divider ─────────────────────────────────────────────────────────── */
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 5px;
+  padding: 0 2px;
+}
+.section-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg4);
+  white-space: nowrap;
+}
+.section-count {
+  font-size: 0.65rem;
+  color: var(--fg4);
+  background: var(--bg2);
+  padding: 0 5px;
+  border-radius: 100px;
   font-variant-numeric: tabular-nums;
 }
-.rollup .tokens {
-  color: var(--fg);
-}
-.rollup .cost {
-  color: var(--green);
-}
-.rollup .anomaly {
-  color: var(--red);
-}
-.ticker {
-  display: inline-block;
+.section-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bg2);
 }
 
-.empty {
-  color: var(--fg4);
-  margin-top: 32px;
-}
-
-.items {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+/* ── item list ───────────────────────────────────────────────────────────────── */
+.items { display: flex; flex-direction: column; gap: 4px; }
 
 .item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  background: var(--bg0-hard);
+  gap: 8px;
+  background: var(--bg1);
   border: 1px solid var(--bg2);
-  border-radius: 10px;
-  padding: 14px 16px;
-}
-.item.flagged {
-  border-color: var(--red);
-}
-
-.ring {
-  flex-shrink: 0;
-}
-.ring-label {
-  font-size: 11px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.item-body {
-  flex: 1;
+  border-left: 3px solid var(--bg3);
+  border-radius: 6px;
+  padding: 6px 8px;
   min-width: 0;
 }
-.item-head {
+.item.flagged  { border-left-color: var(--red); }
+.item.all-done { border-left-color: var(--green); opacity: 0.72; }
+
+/* left meta block */
+.item-meta {
+  flex: 0 0 168px;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 3px;
 }
-.item-head .key {
-  color: var(--orange);
+.item-key-row { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.key-badge {
+  font-size: 0.72rem;
   font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: var(--vscode-editor-font-family, "SF Mono", "Fira Code", monospace);
+  white-space: nowrap;
+  letter-spacing: 0.01em;
 }
-.item-head .title {
-  flex: 1;
+.ky { background: #fabd2f22; color: var(--yellow); }
+.kg { background: #b8bb2622; color: var(--green); }
+.kf { background: #fb493422; color: var(--red); }
+.kr { background: #fe801922; color: var(--orange); }
+.kn { background: var(--bg2); color: var(--fg4); }
+
+.alert-tag {
+  font-size: 0.6rem; font-weight: 800; padding: 1px 5px; border-radius: 3px;
+  background: var(--red); color: #fff; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.done-tag {
+  font-size: 0.6rem; font-weight: 800; padding: 1px 5px; border-radius: 3px;
+  background: var(--green); color: #1d2021; letter-spacing: 0.04em; text-transform: uppercase;
+}
+
+.item-title {
+  color: var(--vscode-foreground, var(--fg));
+  font-size: 0.75rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.actions button {
-  background: var(--bg2);
-  color: var(--fg);
-  border: none;
-  border-radius: 5px;
-  padding: 4px 10px;
-  margin-left: 6px;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-.actions button:hover {
-  background: var(--bg1);
+  opacity: 0.75;
 }
 
-.flow {
+/* ── stages row ──────────────────────────────────────────────────────────────── */
+.stages {
+  flex: 1;
   display: flex;
   align-items: center;
-  margin-top: 12px;
+  gap: 0;
+  min-width: 0;
 }
-.flow-step {
+.stage-slot {
   display: flex;
   align-items: center;
   flex: 1;
+  min-width: 0;
 }
-.connector {
-  height: 2px;
-  background: var(--bg2);
-  flex: 0 0 18px;
-  margin: 0 8px;
-}
-.stage {
+
+/* .arrow replaced by <FlowArrow> animated SVG component */
+
+/* ── chip — active (running / done / failed / review) ────────────────────────── */
+.chip {
   flex: 1;
-  border: 1px solid var(--bg2);
-  border-left-width: 3px;
-  border-radius: 6px;
-  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--bg0);
+  border: 1px solid var(--bg2);
+  border-left: 3px solid var(--chip-color, var(--bg3));
+  border-radius: 5px;
+  padding: 5px 7px;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  min-height: 48px;
 }
-.stage-label {
-  display: block;
-  font-weight: 600;
-  font-size: 0.8rem;
+.chip-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
-.stage-status {
-  font-size: 0.78rem;
+.chip-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--fg4);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  line-height: 1;
+}
+.chip-status {
+  font-size: 0.73rem;
+  color: var(--chip-color, var(--fg4));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.chip-bar {
+  height: 3px;
+  background: var(--bg2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 3px;
+}
+.chip-fill {
+  height: 100%;
+  background: var(--yellow);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
 }
 
-/* Embedded console */
+/* ── chip — idle / pending (compact, no robot) ───────────────────────────────── */
+.chip-idle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px dashed var(--bg2);
+  border-radius: 5px;
+  padding: 5px 8px;
+  min-width: 0;
+  min-height: 48px;
+  opacity: 0.55;
+}
+.chip-label-idle {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--fg4);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+/* ── action buttons ─────────────────────────────────────────────────────────── */
+.actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.btn-icon {
+  background: var(--bg2);
+  color: var(--fg4);
+  border: none;
+  border-radius: 4px;
+  width: 26px; height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s, transform 0.1s;
+  padding: 0;
+}
+.btn-icon:hover {
+  background: var(--bg3);
+  color: var(--fg);
+  box-shadow: 0 0 6px 2px rgba(250, 189, 47, 0.25);
+}
+.btn-icon:active { transform: scale(0.88); }
+
+/* ── embedded console ────────────────────────────────────────────────────────── */
 .console {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 45vh;
-  background: #1d2021;
+  bottom: 0; left: 0; right: 0;
+  height: 42vh;
+  background: var(--bg0);
   border-top: 2px solid var(--bg2);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.5);
+  z-index: 100;
 }
 .console-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: var(--bg0-hard);
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--bg1);
   border-bottom: 1px solid var(--bg2);
 }
-.console-title {
-  color: var(--orange);
-  font-weight: 600;
-}
-.console-status {
-  color: var(--fg4);
-  font-size: 0.8rem;
-  flex: 1;
-}
+.console-title  { color: var(--orange); font-weight: 600; font-size: 0.82rem; }
+.console-status { color: var(--fg4);   font-size: 0.75rem; flex: 1; }
 .console-head button {
   background: var(--bg2);
   color: var(--fg);
   border: none;
-  border-radius: 5px;
-  padding: 4px 12px;
+  border-radius: 4px;
+  padding: 3px 10px;
   cursor: pointer;
+  font-size: 0.78rem;
 }
-.console-head button:hover {
-  background: var(--bg1);
-}
-.console-term {
-  flex: 1;
-  min-height: 0;
-  padding: 6px 8px;
-}
+.console-head button:hover { background: var(--bg3); }
+.console-term { flex: 1; min-height: 0; padding: 4px 6px; }

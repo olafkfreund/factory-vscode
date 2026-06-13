@@ -161,3 +161,67 @@ tr:nth-child(even) td { background: var(--bg0-hard); }
 .btn:hover { background: var(--yellow); color: var(--bg0-hard); }
 .btn.secondary { background: var(--bg2); color: var(--fg); }
 .btn.secondary:hover { background: var(--bg3); color: var(--fg0); }
+
+/* Showcase: lead, pills, feature grid */
+.lead {
+  font-size: 1.15rem;
+  color: var(--fg);
+}
+.lead em { color: var(--fg4); }
+
+.pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 100px;
+  vertical-align: middle;
+}
+.pill.new   { background: rgba(184,187,38,0.18);  color: var(--green);  border: 1px solid rgba(184,187,38,0.4); }
+.pill.soon  { background: rgba(131,165,152,0.18); color: var(--blue);   border: 1px solid rgba(131,165,152,0.4); }
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 1.6em 0;
+}
+.feature-card {
+  border: 1px solid var(--bg2);
+  border-radius: 10px;
+  padding: 18px 18px 16px;
+  background: var(--bg0-hard);
+}
+.feature-card .ico { font-size: 1.4rem; line-height: 1; }
+.feature-card h3 {
+  margin: 10px 0 6px;
+  font-size: 1.05rem;
+  color: var(--yellow);
+}
+.feature-card p { margin: 0; color: var(--fg4); font-size: 0.95rem; }
+.feature-card ul { margin: 8px 0 0; padding-left: 18px; }
+.feature-card li { color: var(--fg4); font-size: 0.92rem; }
+.feature-card strong { color: var(--fg); }
+
+/* Highlight strip for "what's new" */
+.highlight {
+  border: 1px solid var(--bg2);
+  border-left: 3px solid var(--green);
+  border-radius: 8px;
+  background: var(--bg0-hard);
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+.highlight strong { color: var(--fg0); }
+.highlight .kbd {
+  display: inline-block;
+  background: var(--bg1);
+  color: var(--fg0);
+  border: 1px solid var(--bg2);
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 0.82em;
+  font-family: "SFMono-Regular", Consolas, monospace;
+}

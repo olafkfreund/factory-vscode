@@ -16,7 +16,14 @@ export class Notifier implements vscode.Disposable {
   private seeded = false;
   private readonly listener: () => void;
 
-  constructor(private readonly store: StateStore) {
+  /**
+   * @param isMuted optional predicate; when it returns true for a correlation
+   *   key, that work item raises no notifications (per-item mute).
+   */
+  constructor(
+    private readonly store: StateStore,
+    private readonly isMuted: (key: string) => boolean = () => false,
+  ) {
     this.listener = () => this.onChange();
     this.store.on("change", this.listener);
   }
@@ -51,31 +58,41 @@ export class Notifier implements vscode.Disposable {
     if (level === "important" && !IMPORTANT_KINDS.has(e.kind)) {
       return;
     }
+    // Globally muted event kinds, and per-item muted work items, stay silent.
+    if (readConfig().mutedKinds.includes(e.kind)) {
+      return;
+    }
+    if (this.isMuted(e.key)) {
+      return;
+    }
 
     const label = `#${e.key}${e.title ? ` ${e.title}` : ""}`;
     const stage = e.stage ? ` (${e.stage})` : "";
-    const buttons = ["Open Console", "View on GitHub"];
 
     const handle = (pick: string | undefined) => {
-      if (pick === "Open Console") {
+      if (pick === "Review Now") {
+        void vscode.commands.executeCommand("factory.reviewTask", e.key);
+      } else if (pick === "Open Console") {
         void vscode.commands.executeCommand("factory.openConsole", e.key);
       } else if (pick === "View on GitHub") {
         void vscode.commands.executeCommand("factory.openWorkItemOnGitHub", e.key);
+      } else if (pick === "Stop Agent") {
+        void vscode.commands.executeCommand("factory.stopTask", e.key);
       }
     };
 
     switch (e.kind) {
       case "failed":
-        void vscode.window.showWarningMessage(`Factory: ${label}${stage} failed`, ...buttons).then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label}${stage} failed`, "Open Console", "Stop Agent", "View on GitHub").then(handle);
         break;
       case "anomaly":
-        void vscode.window.showWarningMessage(`Factory: ${label} ${e.detail ?? "anomaly"}`, ...buttons).then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label} ${e.detail ?? "anomaly"}`, "Open Console", "Stop Agent", "View on GitHub").then(handle);
         break;
       case "review":
-        void vscode.window.showWarningMessage(`Factory: ${label}${stage} awaiting review`, ...buttons).then(handle);
+        void vscode.window.showWarningMessage(`Factory: ${label}${stage} awaiting review`, "Review Now", "Open Console").then(handle);
         break;
       case "complete":
-        void vscode.window.showInformationMessage(`Factory: ${label}${stage} complete`, ...buttons).then(handle);
+        void vscode.window.showInformationMessage(`Factory: ${label}${stage} complete`, "Open Console", "View on GitHub").then(handle);
         break;
       case "new":
         void vscode.window.showInformationMessage(`Factory: ${label} started`);

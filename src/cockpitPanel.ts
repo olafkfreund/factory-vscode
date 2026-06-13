@@ -1,6 +1,9 @@
 import * as vscode from "vscode";
 import type { StateStore } from "./state/store";
 import type { CockpitState, WebviewToHost, ConsoleStatus } from "./webview/protocol";
+import { makeNonce } from "./webview/util";
+import { throttle } from "./util/throttle";
+import { readConfig } from "./config";
 
 export interface ConsoleHandlers {
   onData: (base64: string) => void;
@@ -19,6 +22,10 @@ export class CockpitPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private activeConsole: vscode.Disposable | undefined;
+  /** Set once the webview has sent its "ready" handshake. */
+  private webviewReady = false;
+  /** A console requested before the webview was ready; flushed on "ready". */
+  private pendingConsoleKey: string | undefined;
 
   static show(context: vscode.ExtensionContext, store: StateStore, connector: ConsoleConnector): CockpitPanel {
     if (CockpitPanel.current) {
@@ -36,6 +43,12 @@ export class CockpitPanel {
 
   /** Open (or switch) the embedded console for a work item, revealing the cockpit. */
   openConsole(key: string): void {
+    // On a cold cockpit the React app has not mounted yet; messages posted to an
+    // unloaded webview are silently dropped. Defer until the "ready" handshake.
+    if (!this.webviewReady) {
+      this.pendingConsoleKey = key;
+      return;
+    }
     this.activeConsole?.dispose();
     void this.panel.webview.postMessage({ type: "consoleOpen", key });
     this.activeConsole = this.connector(key, {
@@ -55,18 +68,41 @@ export class CockpitPanel {
 
     this.panel.webview.onDidReceiveMessage((msg: WebviewToHost) => this.onMessage(msg), null, this.disposables);
 
-    const onChange = () => this.postState();
+    // Coalesce the store's change stream — one post per ~120ms is plenty for a
+    // cockpit and avoids a message storm when many items report progress.
+    const post = throttle(() => this.postState(), 120);
+    const onChange = () => post.trigger();
     this.store.on("change", onChange);
-    this.disposables.push(new vscode.Disposable(() => this.store.off("change", onChange)));
+    this.disposables.push(new vscode.Disposable(() => {
+      this.store.off("change", onChange);
+      post.cancel();
+    }));
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
+
+    // Re-push state when the animation preference changes so it applies live.
+    this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration("factory.cockpit.animations")) {
+          this.postState();
+        }
+      }),
+    );
   }
 
   private onMessage(msg: WebviewToHost): void {
     switch (msg.type) {
-      case "ready":
+      case "ready": {
+        this.webviewReady = true;
         this.postState();
+        // Flush a console that was requested before the webview was ready.
+        if (this.pendingConsoleKey) {
+          const key = this.pendingConsoleKey;
+          this.pendingConsoleKey = undefined;
+          this.openConsole(key);
+        }
         break;
+      }
       case "openConsole":
         this.openConsole(msg.key);
         break;
@@ -86,7 +122,12 @@ export class CockpitPanel {
     for (const item of items) {
       progress[item.correlation_key] = this.store.getProgress(item.correlation_key)?.percent ?? null;
     }
-    const state: CockpitState = { items, progress, anomalies: this.store.getAnomalies() };
+    const state: CockpitState = {
+      items,
+      progress,
+      anomalies: this.store.getAnomalies(),
+      animations: readConfig().cockpitAnimations,
+    };
     void this.panel.webview.postMessage({ type: "state", state });
   }
 
@@ -135,11 +176,3 @@ function fallbackHtml(message: string): string {
 <h1 style="color:#fabd2f">Factory Cockpit</h1><p style="color:#a89984">${message}</p></body></html>`;
 }
 
-function makeNonce(): string {
-  let text = "";
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
-}
